@@ -29,10 +29,16 @@ test('no tenant data leaves the browser', async ({ page, baseURL }) => {
   await page.getByRole('radiogroup', { name: 'Answer for C6' }).getByRole('radio', { name: 'No', exact: true }).click();
   await page.getByRole('tab', { name: /Health/ }).click();
 
-  await page.getByText('Export').click();
+  await page.getByText('Export', { exact: true }).click();
   const download = page.waitForEvent('download');
   await page.getByRole('menuitem', { name: /^SVG/ }).click();
   expect((await download).suggestedFilename()).toMatch(/\.svg$/);
+  for (const item of [/^PDF Vector/, /^PowerPoint Every/, /^draw\.io/]) {
+    await page.getByText('Export', { exact: true }).click();
+    const dl = page.waitForEvent('download');
+    await page.getByRole('menuitem', { name: item }).click();
+    await dl;
+  }
 
   expect(offOrigin, 'requests to other origins').toEqual([]);
   expect(withBody, 'requests carrying a body').toEqual([]);

@@ -34,6 +34,7 @@ const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.roun
 export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: Theme }) {
   const selected = useStore((s) => s.selectedStepId);
   const select = useStore((s) => s.select);
+  const focusLaneId = useStore((s) => (diagram.view === 'executive' ? null : s.focusLaneId));
   const scroller = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState<number | null>(null); // null = not chosen yet → auto-fit on first size
@@ -109,6 +110,7 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: The
             const conds = gs.openConditionIds.length ? `, runs only if ${gs.openConditionIds.join(' and ')}` : '';
             return {
               id: n.id,
+              laneId: n.laneId,
               style: { left: n.x + ox, top: n.y + oy, width: n.width, height: n.height },
               ariaLabel: `${KIND_LABEL[step.kind]}, step ${step.order}, ${step.groups[0] ?? 'system'}: ${stepTitle(step, diagram.overlay.labels[n.id])}${conds}`,
               data: {
@@ -180,8 +182,15 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: The
           </div>
           <div className="absolute left-0 top-0 origin-top-left" style={{ width: scene.width, height: scene.height, transform: `scale(${z})` }}>
             <SceneSvg scene={scene} skip={pinFurniture ? ['step', ...FURNITURE] : ['step']} />
+            {/* Focus on one role (VIS-08): fade every other lane, its edges and decisions. */}
+            {focusLaneId &&
+              L.lanes
+                .filter((l) => l.id !== focusLaneId)
+                .map((l) => (
+                  <div key={l.id} data-testid="dimmed-lane" className="pointer-events-none absolute bg-bg/70" style={{ left: ox + LANE_HEADER_WIDTH, top: oy + l.y, width: scene.width - ox - LANE_HEADER_WIDTH, height: l.height }} />
+                ))}
             {nodes.map((n) => (
-              <StepNode key={n.id} id={n.id} data={n.data} style={n.style} selected={n.id === selected} ariaLabel={n.ariaLabel} onSelect={select} />
+              <StepNode key={n.id} id={n.id} data={n.data} style={focusLaneId && n.laneId !== focusLaneId ? { ...n.style, opacity: 0.3 } : n.style} selected={n.id === selected} ariaLabel={n.ariaLabel} onSelect={select} />
             ))}
           </div>
         </div>

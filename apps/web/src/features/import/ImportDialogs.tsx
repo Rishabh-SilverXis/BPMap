@@ -4,7 +4,8 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
-import { FIELDS, REQUIRED_FIELDS, type ColumnMap, type Field } from '@bpmap/importer-xlsx';
+// Lightweight subpath: field lists only, without the XLSX reader, fflate or zod (DEC-044).
+import { FIELDS, REQUIRED_FIELDS, type ColumnMap, type Field } from '@bpmap/importer-xlsx/fields';
 import { useStore } from '../../store/store.ts';
 
 const FIELD_LABEL: Record<Field, string> = {

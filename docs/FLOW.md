@@ -8,9 +8,9 @@ Legend: `→` calls / passes data to · `⇢` async (worker message, promise, ti
 
 ## Current work
 
-> **Phase 2 · Increment 2.1 ✅ complete** (DEC-034..042, incl. the scrolling viewer with a frozen lane column): views, scenarios, health rules HC-01..07 with dismissals, Playwright e2e (including network privacy) and CI. After the real-export test campaign (DEC-039), executive captions (DEC-040) and flow rules (DEC-041) were fixed. 122 unit + 9 e2e tests; oracle cross-check 73/73.
+> **Phase 2 · Increment 2.2 ✅ complete** (DEC-044..047): PDF / PowerPoint / draw.io exports and packs, persistence split off the entry chunk (169 → 81 KB gzip), re-import reconciliation of orphaned customisations, focus a role, accessible step list. 128 unit + 14 e2e tests.
 >
-> ⏭ **Increment 2.2:** PDF / PPTX / draw.io exports (EXP-02..04), packs (PCK-01/03), re-import reconciliation (IMP-06), focus role (VIS-08), screen-reader step list (NFR-A11Y), and moving stored-data validation off the initial bundle (177 of 180 KB).
+> ⏭ **Increment 2.3** (per PRD): condition-rule import (IMP-09), frozen stage-header row, comparison of two definitions.
 >
 > No path is being modified at the moment.
 
@@ -24,14 +24,15 @@ index.html
  └ <script type=module src="/src/main.tsx">
 main.tsx
  ├ import '@fontsource-variable/inter'        self-hosted font files (no third-party request)
- ├ import '@xyflow/react/dist/style.css', './index.css'  (Tailwind v4 + @bpmap/design-tokens/tokens.css)
+ ├ import './index.css'                       (Tailwind v4 + @bpmap/design-tokens/tokens.css)
+ ⇢ import('./persistence/db.ts')              separate chunk, Dexie + zod (DEC-044); failure → render in memory
  ⇢ hydrateFromStorage()                       persistence/db.ts
  │    ├ db.kv.get('project'), db.kv.get('mappingProfiles')     Dexie / IndexedDB
  │    ├ for each stored definition → parseDefinition()          @bpmap/model (zod gate; invalid → dropped)
  │    ├ isOverlay() for each stored overlay
  │    └ untracked(() → useStore.setState({...}))               store.ts (undo tracking paused)
  ├ startAutosave()                            persistence/db.ts  → useStore.subscribe(...) (see §5)
- └ root.render(<App/>)                        app/App.tsx
+ └ .finally → root.render(<App/>)                        app/App.tsx
 App
  ├ useResolvedTheme()                         app/derive.ts  (pref from store + matchMedia → 'light' | 'dark')
  ├ <TopBar/>  (logo, "Local only" chip, theme toggle → store.setThemePref → localStorage)
@@ -173,13 +174,34 @@ useStore.subscribe((s, prev) => …)                         persistence/db.ts
 ## 6. Export & project file ✅
 
 ```
-Toolbar → run(fn, okText) → toast                          app/Workspace.tsx
- ├ Export ▸ SVG          → svgBlob(def, scene) → toSvg(scene, title)   packages/scene → download()
- ├ Export ▸ PNG (2×)     → pngBlob(def, scene): svgBlob → blob: URL → <img>.decode() → canvas 2× → toBlob
- ├ Copy image            → navigator.clipboard.write([ClipboardItem({'image/png': pngBlob(...)})])
- ├ Export ▸ Project file → projectBlob(definitions, overlays) → .bpmap.json
- └ Open project          → readProjectFile(file): size ≤ 25 MB → JSON.parse → format/version check
-                            → parseProject (zod) → isOverlay → store.replaceProject (untracked)
+Toolbar ▸ Export menu → run(fn, okText) → toast                     app/Workspace.tsx
+ page()  = { name, scene } for the active definition, derived with theme 'light' (DEC-046)
+ pack()  = page() for every definition: deriveDiagram(def, overlay, scenario, view, 'light')   app/derive.ts
+ │
+ ├ This view ▸ PDF        ⇢ import('./pdf.ts') → pdfBlob([page]) → toSvg → toWinAnsi(text)
+ │                           → jspdf + svg2pdf (lazy, ~150 KB) → one page per scene
+ ├ This view ▸ PowerPoint ⇢ import('@bpmap/exporters') → buildPptx(slides) → flatten(scene)
+ │                           → pptxgenjs native shapes, lines per segment, ≤ 56 in → .pptx blob
+ ├ This view ▸ draw.io    ⇢ toDrawio([page]) → flatten(scene) → escaped mxCell XML → .drawio
+ ├ This view ▸ SVG / PNG  → svgBlob(def, scene) → toSvg  ·  pngBlob: svg → <img> → canvas 2×
+ ├ All N definitions ▸ PDF / PowerPoint / draw.io → same functions with pack() (one page/slide each)
+ ├ Copy image             → navigator.clipboard.write([ClipboardItem({'image/png': pngBlob(...)})])
+ ├ Project ▸ file         → projectBlob(definitions, overlays) → .bpmap.json
+ └ Open project           → readProjectFile(file): size ≤ 25 MB → JSON.parse → format/version check
+                             → parseProject (zod) → isOverlay → store.replaceProject (untracked)
+```
+
+## 6a. Re-import, focus, step list ✅
+
+```
+importFile(same definition) → store.addDefinition (replaces by process+variant)
+  → RightPanel ▸ Import tab → OrphanNotice: findOrphans(overlay, stepIds, laneIds)   store/overlay.ts
+       → "N customisations no longer match a step" + text → Remove → store.removeOrphans
+       → withOverlay(...) → withoutOrphans (undoable)
+Toolbar ▸ Focus on a role → store.setFocusLane(id) → DiagramViewer: dimmed-lane bands over other
+       lanes + steps whose laneId ≠ focus at opacity 0.3 (setActive resets focus)
+Toolbar ▸ Step list → store.setListMode → Workspace renders StepList (table, tbody per stage)
+       instead of DiagramViewer; step button → store.select(stepId) → right panel
 ```
 
 ---
@@ -191,7 +213,9 @@ npm test → vitest (packages/*/src/**/*.test.ts): model · importer (golden fil
 npm run e2e → playwright.config.ts → webServer: npm run build && npm run preview (CSP active, :4173)
    └ apps/web/e2e/*.spec.ts with channel 'chrome' (system Chrome)
         privacy.spec.ts: page.on('request') → assert same-origin, no bodies, no CSP violations (NFR-PRIV-01)
+        privacy.spec.ts also downloads SVG, PDF, PowerPoint and draw.io under the CSP
         flows.spec.ts:   order + diamonds · scenario skip/reset · views · dismiss → reload → restore
+                         · viewer · exports · focus role · step list · re-import orphans
 .github/workflows/ci.yml → npm ci → typecheck → test → build + secret scan of dist → e2e (traces on failure)
 npm run oracle -- <export.xlsx> → tools/oracle (stdlib Python) → expected.json; compared with our model,
    scenarios and views; real-export.local.spec.ts drives the UI with the oracle's counts (local only, DEC-039)

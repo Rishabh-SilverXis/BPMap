@@ -12,6 +12,8 @@ export const FIXTURES = {
   unknownLayout: 'unknown-layout.xlsx',
   /** Anonymised mirror of a real Workday export: real layout, &#xa; encoding, order a, ba…bd, d… (DEC-030) */
   workdayLayout: 'change-job-workday-layout.xlsx',
+  /** Same definition with step o removed: re-import / orphan reconciliation (IMP-06) */
+  workdayLayoutV2: 'change-job-workday-layout-v2.xlsx',
 } as const;
 
 export type FixtureName = keyof typeof FIXTURES;

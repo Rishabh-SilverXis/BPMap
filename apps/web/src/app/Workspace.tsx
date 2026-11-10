@@ -3,22 +3,25 @@
  * Lazy-loaded by App so the import screen ships without React Flow and the engines (Architecture §23, DEC-022).
  */
 import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Undo2, Redo2, Download, Copy, FolderOpen, X, Check, Loader2, Plus, ChevronDown } from 'lucide-react';
+import { Undo2, Redo2, Download, Copy, FolderOpen, X, Check, Loader2, Plus, ChevronDown, ScanSearch, List } from 'lucide-react';
 import clsx from 'clsx';
 import { useStore as useZustand } from 'zustand';
 import { summaryLine } from '@bpmap/scene';
 import type { Theme } from '@bpmap/design-tokens';
 import { useActiveDefinition, useActiveOverlay, useActiveScenario, useActiveView, useStore } from '../store/store.ts';
 import type { View } from '../store/overlay.ts';
-import { useDiagram, type Diagram } from './derive.ts';
+import { deriveDiagram, useDiagram, type Diagram } from './derive.ts';
 import { DropZone } from '../features/import/ImportScreen.tsx';
 import { DiagramViewer } from '../features/canvas/DiagramViewer.tsx';
+import { StepList } from '../features/canvas/StepList.tsx';
 import { RightPanel } from '../features/panels/RightPanel.tsx';
-import { copyPng, download, fileBase, pngBlob, projectBlob, readProjectFile, svgBlob } from '../features/export/exporters.ts';
+import { copyPng, download, drawioBlob, fileBase, pdfBlob, pngBlob, pptxBlob, projectBlob, readProjectFile, svgBlob, type ExportPage } from '../features/export/exporters.ts';
+import type { ProcessDefinition } from '@bpmap/model';
 
 export type Toast = { kind: 'ok' | 'error'; text: string } | null;
 
 export default function Workspace({ theme, onToast }: { theme: Theme; onToast: (t: Toast) => void }) {
+  const listMode = useStore((s) => s.listMode);
   const def = useActiveDefinition();
   const overlay = useActiveOverlay();
   const scenario = useActiveScenario();
@@ -31,7 +34,7 @@ export default function Workspace({ theme, onToast }: { theme: Theme; onToast: (
       <Toolbar diagram={diagram} onToast={onToast} />
       <div className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1 bg-bg">
-          <DiagramViewer diagram={diagram} theme={theme} />
+          {listMode ? <StepList diagram={diagram} /> : <DiagramViewer diagram={diagram} theme={theme} />}
         </div>
         <div className="hidden lg:block">
           <RightPanel diagram={diagram} />
@@ -136,6 +139,17 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
   const openInput = useRef<HTMLInputElement>(null);
   const menu = useRef<HTMLDetailsElement>(null);
   const base = fileBase(diagram.def);
+  const focusLaneId = useStore((s) => s.focusLaneId);
+  const setFocusLane = useStore((s) => s.setFocusLane);
+  const listMode = useStore((s) => s.listMode);
+  const setListMode = useStore((s) => s.setListMode);
+  // Exports are always rendered light (DS §12), whatever the screen theme (DEC-046).
+  const page = (): ExportPage => ({ title: `${titleOf(diagram.def)} · ${VIEW_LABEL[diagram.view]}`, scene: deriveDiagram(diagram.def, diagram.overlay, diagram.scenario, diagram.view, 'light').scene });
+  const pack = (): ExportPage[] =>
+    definitions.map((d) => {
+      const v = views[d.id] ?? 'owner';
+      return { title: `${titleOf(d)} · ${VIEW_LABEL[v]}`, scene: deriveDiagram(d, overlays[d.id], scenarios[d.id], v, 'light').scene };
+    });
 
   const run = async (fn: () => Promise<void> | void, ok: string) => {
     menu.current?.removeAttribute('open');
@@ -157,8 +171,37 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
       <ToolButton onClick={() => redo()} disabled={!canRedo} label="Redo">
         <Redo2 className="h-4 w-4" />
       </ToolButton>
+      <div className="mx-1 h-5 w-px bg-border" />
+      {diagram.view !== 'executive' && !listMode && (
+        <label className="flex items-center gap-1.5 text-[13px] text-text-secondary">
+          <ScanSearch className="h-4 w-4" aria-hidden />
+          <span className="sr-only xl:not-sr-only">Focus</span>
+          <select
+            aria-label="Focus on a role"
+            value={focusLaneId ?? ''}
+            onChange={(e) => setFocusLane(e.target.value || null)}
+            className="h-8 max-w-48 rounded-[var(--radius-sm)] border border-border-strong bg-surface px-2 text-[13px] text-text"
+          >
+            <option value="">All roles</option>
+            {diagram.layout.lanes.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <button
+        type="button"
+        aria-pressed={listMode}
+        onClick={() => setListMode(!listMode)}
+        title="Accessible step list: the same process as a table"
+        className={clsx('flex h-8 items-center gap-1.5 rounded-[var(--radius-sm)] border px-2 text-[13px] font-medium', listMode ? 'border-primary bg-primary text-on-primary' : 'border-border-strong text-text-secondary hover:bg-surface-sunken')}
+      >
+        <List className="h-4 w-4" aria-hidden /> Step list
+      </button>
       <div className="ml-auto flex items-center gap-1">
-        <ToolButton onClick={() => void run(() => copyPng(diagram.def, diagram.scene), 'Image copied to the clipboard')} label="Copy image">
+        <ToolButton onClick={() => void run(() => copyPng(diagram.def, page().scene), 'Image copied to the clipboard')} label="Copy image">
           <Copy className="h-4 w-4" /> <span className="hidden xl:inline">Copy image</span>
         </ToolButton>
         <ToolButton onClick={() => openInput.current?.click()} label="Open a .bpmap.json project file">
@@ -180,22 +223,51 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
           <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-[var(--radius-sm)] bg-action px-3 text-[13px] font-semibold text-on-action">
             <Download className="h-4 w-4" aria-hidden /> Export <ChevronDown className="h-3.5 w-3.5" aria-hidden />
           </summary>
-          <div role="menu" className="absolute right-0 z-40 mt-1 w-64 rounded-[var(--radius-md)] border border-border bg-surface p-1 shadow-[var(--shadow-e3)]">
+          <div role="menu" className="absolute right-0 z-40 mt-1 max-h-[70vh] w-72 overflow-auto rounded-[var(--radius-md)] border border-border bg-surface p-1 shadow-[var(--shadow-e3)]">
+            <MenuHeading>This view · {VIEW_LABEL[diagram.view]}</MenuHeading>
             {[
-              { label: 'SVG', hint: 'Vector image for documents and wikis', fn: () => download(svgBlob(diagram.def, diagram.scene), `${base}.svg`), ok: 'SVG downloaded' },
-              { label: 'PNG (2×)', hint: 'For chat, email and slides', fn: async () => download(await pngBlob(diagram.def, diagram.scene), `${base}.png`), ok: 'PNG downloaded' },
-              { label: 'Project file', hint: 'All definitions + customisations (.bpmap.json)', fn: () => download(projectBlob({ definitions, overlays, scenarios, views }), `${base}.bpmap.json`), ok: 'Project file downloaded' },
+              { label: 'PDF', hint: 'Vector, sharp at any size, for documents and print', fn: async () => download(await pdfBlob([page()]), `${base}.pdf`), ok: 'PDF downloaded' },
+              { label: 'PowerPoint', hint: 'Every box and line is an editable shape', fn: async () => download(await pptxBlob([page()], titleOf(diagram.def)), `${base}.pptx`), ok: 'PowerPoint downloaded' },
+              { label: 'draw.io (for Visio)', hint: 'Edit in diagrams.net, save as Visio or open in Lucidchart', fn: async () => download(await drawioBlob([page()]), `${base}.drawio`), ok: 'draw.io file downloaded' },
+              { label: 'SVG', hint: 'Vector image for web pages and wikis', fn: () => download(svgBlob(diagram.def, page().scene), `${base}.svg`), ok: 'SVG downloaded' },
+              { label: 'PNG (2×)', hint: 'For chat, email and slides', fn: async () => download(await pngBlob(diagram.def, page().scene), `${base}.png`), ok: 'PNG downloaded' },
             ].map((m) => (
-              <button key={m.label} role="menuitem" type="button" onClick={() => void run(m.fn, m.ok)} className="flex w-full flex-col items-start rounded-[var(--radius-sm)] px-3 py-2 text-left hover:bg-surface-sunken">
-                <span className="text-sm font-medium">{m.label}</span>
-                <span className="text-xs text-text-muted">{m.hint}</span>
-              </button>
+              <MenuItem key={m.label} {...m} onRun={run} />
             ))}
-            <p className="px-3 pb-1 pt-2 text-[11px] text-text-muted">PDF, PowerPoint and draw.io arrive in Phase 2.</p>
+            {definitions.length > 1 && (
+              <>
+                <MenuHeading>All {definitions.length} definitions · one page each</MenuHeading>
+                {[
+                  { label: 'PDF pack', hint: 'Each definition in its saved view', fn: async () => download(await pdfBlob(pack()), 'bpmap-pack.pdf'), ok: 'PDF pack downloaded' },
+                  { label: 'PowerPoint pack', hint: 'One editable slide per definition', fn: async () => download(await pptxBlob(pack(), 'BPMap pack'), 'bpmap-pack.pptx'), ok: 'PowerPoint pack downloaded' },
+                  { label: 'draw.io pack', hint: 'One page per definition', fn: async () => download(await drawioBlob(pack()), 'bpmap-pack.drawio'), ok: 'draw.io pack downloaded' },
+                ].map((m) => (
+                  <MenuItem key={m.label} {...m} onRun={run} />
+                ))}
+              </>
+            )}
+            <MenuHeading>Project</MenuHeading>
+            <MenuItem label="Project file" hint="All definitions + customisations + scenarios (.bpmap.json)" fn={() => download(projectBlob({ definitions, overlays, scenarios, views }), `${base}.bpmap.json`)} ok="Project file downloaded" onRun={run} />
           </div>
         </details>
       </div>
     </div>
+  );
+}
+
+const VIEW_LABEL: Record<View, string> = { executive: 'Executive', owner: 'Process owner', configurator: 'Configurator' };
+const titleOf = (d: ProcessDefinition) => (d.variant ? `${d.process} (${d.variant})` : d.process);
+
+function MenuHeading({ children }: { children: ReactNode }) {
+  return <p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.08em] text-text-muted">{children}</p>;
+}
+
+function MenuItem({ label, hint, fn, ok, onRun }: { label: string; hint: string; fn: () => Promise<void> | void; ok: string; onRun: (fn: () => Promise<void> | void, ok: string) => Promise<void> }) {
+  return (
+    <button role="menuitem" type="button" onClick={() => void onRun(fn, ok)} className="flex w-full flex-col items-start rounded-[var(--radius-sm)] px-3 py-2 text-left hover:bg-surface-sunken">
+      <span className="text-sm font-medium">{label}</span>
+      <span className="text-xs text-text-muted">{hint}</span>
+    </button>
   );
 }
 

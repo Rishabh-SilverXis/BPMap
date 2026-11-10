@@ -65,3 +65,75 @@ test('viewer: fixed diagram scrolls natively, lane column stays frozen, zoom con
   await page.getByTestId('zoom-level').click();
   await expect(page.getByTestId('zoom-level')).toHaveText('100%');
 });
+
+test('exports: PDF, PowerPoint, draw.io, SVG, PNG and packs download as valid files (EXP-02..04, PCK-03)', async ({ page }) => {
+  const { readFileSync } = await import('node:fs');
+  const grab = async (item: RegExp) => {
+    await page.getByText('Export', { exact: true }).click();
+    const dl = page.waitForEvent('download');
+    await page.getByRole('menuitem', { name: item }).click();
+    const d = await dl;
+    return { name: d.suggestedFilename(), bytes: readFileSync((await d.path())!) };
+  };
+  const pdf = await grab(/^PDF Vector/);
+  expect(pdf.name).toMatch(/\.pdf$/);
+  expect(pdf.bytes.subarray(0, 5).toString()).toBe('%PDF-');
+  const pptx = await grab(/^PowerPoint Every/);
+  expect(pptx.bytes.subarray(0, 2).toString()).toBe('PK'); // OOXML zip
+  const drawio = await grab(/^draw\.io \(for Visio\)/);
+  expect(drawio.bytes.toString()).toContain('<mxfile');
+  const svg = await grab(/^SVG/);
+  expect(svg.bytes.toString()).toContain('<svg');
+  // light theme in exports even when the app is dark (DEC-046)
+  await page.emulateMedia({ colorScheme: 'dark' });
+  const svgDark = await grab(/^SVG/);
+  expect(svgDark.bytes.toString()).toContain('fill="#FFFFFF"');
+  // a second definition makes the pack items appear
+  await page.getByRole('button', { name: 'Add file' }).click();
+  await page.locator('input[type=file][accept*=".xlsx"]').first().setInputFiles((await import('./helpers.ts')).fixture('change-job-synthetic.xlsx'));
+  await expect(page.locator('[aria-current=page]')).toContainText('Synthetic');
+  const packPdf = await grab(/^PDF pack/);
+  expect(packPdf.bytes.subarray(0, 5).toString()).toBe('%PDF-');
+  expect((packPdf.bytes.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length).toBe(2);
+  const packPptx = await grab(/^PowerPoint pack/);
+  expect(packPptx.bytes.subarray(0, 2).toString()).toBe('PK');
+});
+
+test('focus on a role dims every other lane (VIS-08)', async ({ page }) => {
+  await page.getByLabel('Focus on a role').selectOption({ label: 'HR Partner' });
+  const roles = (await page.getByLabel('Focus on a role').locator('option').count()) - 1; // minus "All roles"
+  expect(roles).toBeGreaterThan(2);
+  await expect(page.getByTestId('dimmed-lane')).toHaveCount(roles - 1);
+  const hrOpacity = await page.locator('[data-testid=step]', { hasText: 'Manage Union Membership' }).evaluate((e) => getComputedStyle(e).opacity);
+  const otherOpacity = await page.locator('[data-testid=step]', { hasText: 'Assign Pay Group' }).evaluate((e) => getComputedStyle(e).opacity);
+  expect([hrOpacity, otherOpacity]).toEqual(['1', '0.3']);
+  await page.getByLabel('Focus on a role').selectOption({ label: 'All roles' });
+  await expect(page.getByTestId('dimmed-lane')).toHaveCount(0);
+});
+
+test('accessible step list shows every step in Workday order and selects on click (NFR-A11Y)', async ({ page }) => {
+  await page.getByRole('button', { name: 'Step list' }).click();
+  const table = page.getByRole('region', { name: 'Step list' }).getByRole('table');
+  await expect(table.locator('tbody')).toHaveCount(26); // one row group per stage
+  await expect(table.getByRole('rowheader').first()).toContainText('1 · a');
+  await expect(table.getByRole('rowheader').nth(1)).toContainText('2 · ba');
+  await table.getByRole('button', { name: 'Assign Pay Group' }).click();
+  await expect(page.getByRole('tabpanel')).toContainText('Payroll Partner');
+  await expect(table).toContainText('Process complete after this step');
+  await page.getByRole('button', { name: 'Step list' }).click();
+  await expect(page.locator('[data-testid=step]')).toHaveCount(26);
+});
+
+test('re-import: customisations on a removed step are kept and can be removed (IMP-06)', async ({ page }) => {
+  await page.locator('[data-testid=step]', { hasText: 'Assign Pay Group' }).click();
+  await page.getByLabel('Note (shows as N on the step)').fill('Payroll owns this');
+  await page.waitForTimeout(700);
+  await importFile(page, 'change-job-workday-layout-v2.xlsx'); // same definition, step o removed
+  await expect(page.locator('[data-testid=step]')).toHaveCount(25);
+  await page.getByRole('tab', { name: /^Import/ }).click();
+  const notice = page.getByTestId('orphans');
+  await expect(notice).toContainText('1 customisation no longer match a step');
+  await expect(notice).toContainText('Payroll owns this');
+  await notice.getByRole('button', { name: /Remove it/ }).click();
+  await expect(page.getByTestId('orphans')).toHaveCount(0);
+});

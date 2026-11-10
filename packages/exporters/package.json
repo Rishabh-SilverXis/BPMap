@@ -1,0 +1,22 @@
+{
+  "name": "@bpmap/exporters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Scene \u2192 PowerPoint (native shapes) and draw.io XML (EXP-03, EXP-04)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@bpmap/scene": "*",
+    "pptxgenjs": "^4.0.0"
+  },
+  "devDependencies": {
+    "@bpmap/fixtures": "*",
+    "@bpmap/importer-xlsx": "*",
+    "@bpmap/engine-graph": "*",
+    "@bpmap/engine-layout": "*",
+    "fflate": "^0.8.0",
+    "fast-xml-parser": "^5.0.0"
+  }
+}

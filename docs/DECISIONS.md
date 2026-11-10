@@ -341,3 +341,42 @@ Phase 2 ("Parity+") is split in two. **2.1** (this increment) covers views (VW-0
 - **Why:** The legend and the condition list sit in the scene's lower-left. On a wide process they scrolled away as soon as you moved right, which is exactly when you need them to decode C-badges.
 - **Limit (deliberate):** furniture is pinned only when its full width (~1,300 px of scene × zoom) fits the visible area. Otherwise a pinned block would be clipped with no way to scroll to its right half, so it scrolls with the diagram instead (e.g. at 100% zoom in a narrow window).
 - **Verified:** scrolled 2,500 px right and to the bottom on the real export, the legend and conditions stay at the left edge with one copy. The e2e viewer test asserts this.
+
+## DEC-044 · Load persistence after the entry chunk; exporters only on use
+- **Date:** 2026-11-11 · **Serves:** NFR-PERF (startup budget), Architecture §13
+- **Decision:**
+  - `main.tsx` dynamically imports `persistence/db.ts` (Dexie + zod validation of stored data), awaits `hydrateFromStorage()`, then renders. If storage fails, the app still renders and works in memory.
+  - Exporters (`pptxgenjs`, `jspdf` + `svg2pdf.js`, draw.io) are imported inside the export handlers.
+  - The import dialog imports field labels from the new `@bpmap/importer-xlsx/fields` subpath, so the parser doesn't get pulled into the entry chunk.
+- **Why:** The entry chunk was 169 KB gzip, almost all of it code needed only after first paint, or never.
+- **Result:** Entry 169 → **81 KB** gzip. Startup total ≈ 142 KB (entry 81 + model 24 + order 7 + db 30, fetched in parallel). On first use: PDF ≈ 150 KB, PowerPoint ≈ 121 KB.
+- **Trade-off:** The first render waits for the db chunk (one extra round trip on a cold load). This is intentional, so the user never sees an empty workspace flash before their project restores.
+
+## DEC-045 · Exports are built from the same scene: native PowerPoint shapes, draw.io XML, vector PDF
+- **Date:** 2026-11-11 · **Serves:** EXP-02/03/04, PCK-01/03
+- **Decision:**
+  - New package `packages/exporters`. `flatten(scene)` turns the scene display list into absolute primitives (rect, ellipse, diamond, text, polyline).
+  - `toDrawio(scenes[])` writes one multi-page `mxfile`, one page per definition. Shapes use `html=0` and every value is XML-escaped, so labels can't inject markup.
+  - `buildPptx(slides)` uses **native shapes and text boxes**, so steps stay editable in PowerPoint. Each routed segment is its own line, with a triangle arrow on the last one. The slide size is scaled so the scene's longest side ≤ 56 in (PowerPoint's limit).
+  - PDF: `jspdf` + `svg2pdf.js` render our own SVG as vectors.
+  - Packs ("All N definitions") put one page or slide per definition in a single file.
+- **Why:** One display list keeps the screen and every export identical (Architecture §10). Native shapes beat a pasted image: the PRD's personas edit decks.
+- **Accepted risk:** `npm audit` flags a high-severity `image-size` issue via `pptxgenjs`. It is reachable only through `addImage`, and we never pass images, so the vulnerable code never runs. Revisit if image export is added.
+- **Tests:** 6 unit tests (drawio is well-formed XML with every step label, escaping, multi-page; pptx is a valid zip with N slides and editable text). e2e: real downloads on the production build under CSP (`%PDF-`, `PK`, `<mxfile`).
+
+## DEC-046 · Exports always use the light theme; the PDF text is limited to WinAnsi
+- **Date:** 2026-11-11 · **Serves:** EXP-*, DS §3 (print)
+- **Decision:**
+  - `page()` and `pack()` in Workspace derive the scene with `theme: 'light'`, whatever the UI theme is.
+  - For PDF only, text passes through `toWinAnsi`, which maps smart quotes, dashes and ellipses to ASCII, and other characters outside Latin-1 to `?`.
+- **Why:** Exports are printed, pasted into decks and emailed, so a dark-theme export looks broken on white paper. jsPDF's standard fonts cover WinAnsi only. Without the sanitizer, non-Latin text becomes garbage glyphs and corrupts spacing.
+- **Limit:** PDFs of definitions with non-Latin names (e.g. Japanese) lose those characters. SVG, PNG, PowerPoint and draw.io keep full Unicode. The fix is embedding a subset font, deferred until a customer needs it.
+
+## DEC-047 · Re-import keeps orphaned edits visible; focus a role; accessible step list
+- **Date:** 2026-11-11 · **Serves:** IMP-06, VIS-08, NFR-A11Y
+- **Decision:**
+  - **Orphans:** When a definition is re-imported, overlay entries (labels, notes, hidden, lane names) whose step or lane ID no longer exists are **not dropped silently**. `findOrphans()` lists them, and the Import tab shows "N customisations no longer match a step", with the text, plus a **Remove** button (`withoutOrphans`, undoable). Step IDs are derived from order + kind + task (`makeStepIds`, Architecture §6.2), not row position, so unchanged steps keep their edits automatically.
+  - **Focus a role:** A toolbar select sets `focusLaneId`. The viewer overlays the other lanes with a dim band and fades their steps to 30%. Steps stay clickable. Switching definitions resets the focus.
+  - **Step list:** A toggle replaces the diagram with a semantic `<table>`: one `<tbody>` per stage, row headers "order · letter", and columns for type, who, runs only if, and due. Step names are buttons that select the step, the same as clicking it in the diagram.
+- **Why:** Silently losing someone's notes after a re-import is the worst trust failure for this tool, and keeping them invisibly is almost as bad. A diagram is unusable with a screen reader, so the table is the equivalent view, not an afterthought.
+- **Tests:** e2e: focus dims (roles − 1) lanes; the step list has 26 stages in Workday order; re-import with the v2 fixture (step `o` removed) shows the orphaned note, and Remove clears it. New fixture: `change-job-workday-layout-v2.xlsx`.

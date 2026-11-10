@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Workday View Definition XLSX \u2192 ProcessDefinition (worker-safe)",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./fields": "./src/mapping.ts"
   },
   "dependencies": {
     "@bpmap/model": "*",

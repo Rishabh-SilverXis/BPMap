@@ -30,9 +30,9 @@ export interface Diagram {
   findings: Finding[];
 }
 
-export function useDiagram(def: ProcessDefinition | null, overlay: Overlay | undefined, scenario: ScenarioState | undefined, view: View, theme: Theme): Diagram | null {
-  return useMemo(() => {
-    if (!def) return null;
+/** Pure derivation (no React): used by the hook below and by exporters, which always render light (DS §12). */
+export function deriveDiagram(def: ProcessDefinition, overlay: Overlay | undefined, scenario: ScenarioState | undefined, view: View, theme: Theme): Diagram {
+  {
     const ov = overlay ?? emptyOverlay();
     const sc = scenario ?? emptyScenario();
     const outcome = evaluateScenario(def, sc.answers);
@@ -46,7 +46,11 @@ export function useDiagram(def: ProcessDefinition | null, overlay: Overlay | und
     const subtitle = outcome.summary ? `${outcome.summary} (${outcome.skipped.size} step${outcome.skipped.size === 1 ? '' : 's'} skipped)` : undefined;
     const scene = buildExportScene(def, graph, L, theme, { labels: ov.labels, notes: ov.notes, view, ...(subtitle ? { subtitle } : {}) });
     return { def, overlay: ov, scenario: sc, view, outcome, graph, layout: L, scene, findings: runRules(def) };
-  }, [def, overlay, scenario, view, theme]);
+  }
+}
+
+export function useDiagram(def: ProcessDefinition | null, overlay: Overlay | undefined, scenario: ScenarioState | undefined, view: View, theme: Theme): Diagram | null {
+  return useMemo(() => (def ? deriveDiagram(def, overlay, scenario, view, theme) : null), [def, overlay, scenario, view, theme]);
 }
 
 /** Resolved theme from the user's preference + OS setting (Design System §15.1). */

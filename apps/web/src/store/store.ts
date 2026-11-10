@@ -9,7 +9,7 @@ import { create } from 'zustand';
 import { temporal } from 'zundo';
 import type { ProcessDefinition } from '@bpmap/model';
 import type { ColumnMap, ImportOutcome } from '@bpmap/importer-xlsx';
-import { emptyOverlay, type Overlay, type View } from './overlay.ts';
+import { emptyOverlay, withoutOrphans, type Orphans, type Overlay, type View } from './overlay.ts';
 import { emptyScenario, pruneScenario, type Answer, type ScenarioState } from '@bpmap/engine-scenario';
 import { importFile } from '../workers/importClient.ts';
 
@@ -43,6 +43,9 @@ export interface ProjectState {
   importState: ImportState;
   mappingProfiles: Record<string, ColumnMap>;
   saveState: 'idle' | 'saving' | 'saved' | 'unavailable';
+  /** Session-only UI: focus one lane (VIS-08) and the accessible step-list view (NFR-A11Y). */
+  focusLaneId: string | null;
+  listMode: boolean;
   themePref: ThemePref;
 
   importFiles(files: File[]): Promise<void>;
@@ -60,6 +63,9 @@ export interface ProjectState {
   dismissFinding(fingerprint: string, reason: string): void;
   restoreFinding(fingerprint: string): void;
   setView(view: View): void;
+  setFocusLane(laneId: string | null): void;
+  setListMode(on: boolean): void;
+  removeOrphans(orphans: Orphans): void;
   setAnswer(conditionId: string, answer: Answer): void;
   toggleDecision(conditionId: string): void;
   resetScenario(): void;
@@ -171,6 +177,11 @@ export const useStore = create<ProjectState>()(
         mappingProfiles: {},
         saveState: 'idle',
         themePref: readThemePref(),
+        focusLaneId: null,
+        listMode: false,
+        setFocusLane: (laneId) => set({ focusLaneId: laneId }),
+        setListMode: (on) => set({ listMode: on }),
+        removeOrphans: (orphans) => withOverlay(`orphans|${Date.now()}`, (o) => withoutOrphans(o, orphans)),
 
         async importFiles(files) {
           const xs = files.filter(Boolean);
@@ -185,7 +196,7 @@ export const useStore = create<ProjectState>()(
           await runImport(file, st.bytes, { fingerprint: st.outcome.fingerprint, map }, st.queue);
         },
         dismissImportError: () => set({ importState: { status: 'idle' } }),
-        setActive: (id) => set({ activeId: id, selectedStepId: null }),
+        setActive: (id) => set({ activeId: id, selectedStepId: null, focusLaneId: null }),
         removeDefinition(id) {
           useStore.temporal.getState().clear(); // undo history refers to the removed definition
           const s = get();

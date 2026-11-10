@@ -136,12 +136,12 @@ await writeBook('unknown-layout.xlsx', (wb) => {
     R('u', 'To Do', 'Confirm Benefits Eligibility', ['Benefits Partner'], ['Pay rate type is salary?', 'Worker in an eligible employee group?']),
     R('v', 'Action', 'Change Benefit Elections', ['Employee As Self'], ['Change affects benefits?' + WD]),
   ];
-  await writeBook('change-job-workday-layout.xlsx', (wb) => {
+  const writeWorkdayLayout = (file, rows) => writeBook(file, (wb) => {
     const ws = wb.addWorksheet('Business Process Steps');
     preamble(ws);
     ws.addRow(['Business Process Steps']);
     ws.addRow(['Step', 'Order', 'If', 'Type', 'Specify', 'Optional', 'Group', 'Additional Information', 'Routing Modifier', 'All', 'Run As User', 'Validation', 'Due Date', 'Due Date Is Based On Effective Date', 'Do Not Advance', 'Complete', 'Subprocess Definitions']);
-    for (const r of ROWS) {
+    for (const r of rows) {
       const label = `${P2} step ${r.o} - ${r.type}${r.type === 'Service' ? ` [${r.specify}]` : ''}`;
       ws.addRow([label, r.o, r.conds.join(LIST), r.type, r.specify, 'No', r.groups.join(LIST), r.info.join(BR), r.routing, '', '', r.validation.join(LIST), r.due, '', 'No', r.complete, '']);
     }
@@ -150,7 +150,7 @@ await writeBook('unknown-layout.xlsx', (wb) => {
     n.addRow(['Notifications']);
     n.addRow(['System Notifications']);
     n.addRow(['Disabled', 'Manual Advance System Notification Disabled', 'Workflow Step', 'Order', 'Type', 'Specify', 'Group']);
-    for (const r of ROWS.filter((x) => ['a', 'ba', 'd', 'u'].includes(x.o))) n.addRow(['No', 'No', `${P2} step ${r.o} - ${r.type}`, r.o, r.type, r.specify, r.groups.join(LIST)]);
+    for (const r of rows.filter((x) => ['a', 'ba', 'd', 'u'].includes(x.o))) n.addRow(['No', 'No', `${P2} step ${r.o} - ${r.type}`, r.o, r.type, r.specify, r.groups.join(LIST)]);
     n.addRow(['Custom Notifications']);
     n.addRow(['Disabled', 'Notification', 'Business Process Condition', 'Recipients', 'Exclude Delegates in Notifications', 'Email Configuration', 'Reply To Email Address', 'Email Option', 'Trigger on Status / On Entry / On Exit / On Disposition', 'Subject', 'Body', 'Preview']);
     n.addRow(['No', 'Completed notifies Manager', '', 'Manager', 'No', '', '', 'Default', 'Trigger on Status : Completed', 'Status', '', '']);
@@ -167,7 +167,10 @@ await writeBook('unknown-layout.xlsx', (wb) => {
     // Long data cell mentioning "notification" and "recipient": must NOT make this a notifications sheet.
     f.addRow(['Available Fields', ['Notification Recipient Count', 'Send Date', 'Trigger Status'].join(LIST)]);
   });
+  await writeWorkdayLayout('change-job-workday-layout.xlsx', ROWS);
+  await writeWorkdayLayout('change-job-workday-layout-v2.xlsx', ROWS.filter((r) => r.o !== 'o'));
 }
 
+// 5. Same definition after a configuration change (IMP-06 re-import): step o removed.
 copyFileSync(join(out, 'change-job-synthetic.xlsx'), join(here, '..', '..', '..', 'apps', 'web', 'public', 'sample-change-job.xlsx'));
 console.log('copied sample to apps/web/public/sample-change-job.xlsx');

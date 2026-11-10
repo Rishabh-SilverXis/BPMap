@@ -108,3 +108,26 @@ export async function readProjectFile(file: File): Promise<ProjectContents> {
   for (const [k, v] of Object.entries(f.views ?? {})) if (isView(v)) views[k] = v;
   return { definitions: parsed.value.definitions.map(withFreshStageKeys), overlays, scenarios, views };
 }
+
+/* ---------------------------------------------------------------- Increment 2.2 formats (lazy) */
+
+export interface ExportPage {
+  title: string;
+  scene: Scene;
+}
+
+export async function pptxBlob(pages: ExportPage[], title: string): Promise<Blob> {
+  const { buildPptx } = await import('@bpmap/exporters');
+  const pptx = buildPptx(pages, { title });
+  return (await pptx.write({ outputType: 'blob' })) as Blob;
+}
+
+export async function drawioBlob(pages: ExportPage[]): Promise<Blob> {
+  const { toDrawio } = await import('@bpmap/exporters');
+  return new Blob([toDrawio(pages.map((p) => ({ name: p.title, scene: p.scene })))], { type: 'application/xml' });
+}
+
+export async function pdfBlob(pages: ExportPage[]): Promise<Blob> {
+  const { pdfBlob: render } = await import('./pdf.ts');
+  return render(pages);
+}
