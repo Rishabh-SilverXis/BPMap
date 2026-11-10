@@ -33,7 +33,7 @@ test('no tenant data leaves the browser', async ({ page, baseURL }) => {
   const download = page.waitForEvent('download');
   await page.getByRole('menuitem', { name: /^SVG/ }).click();
   expect((await download).suggestedFilename()).toMatch(/\.svg$/);
-  for (const item of [/^PDF Vector/, /^PowerPoint Every/, /^draw\.io/]) {
+  for (const item of [/^PDF Vector/, /^PowerPoint Editable/, /^draw\.io/]) {
     await page.getByText('Export', { exact: true }).click();
     const dl = page.waitForEvent('download');
     await page.getByRole('menuitem', { name: item }).click();

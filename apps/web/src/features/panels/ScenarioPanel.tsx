@@ -8,6 +8,7 @@ import { RotateCcw, Save, Trash2 } from 'lucide-react';
 import type { Answer } from '@bpmap/engine-scenario';
 import type { Diagram } from '../../app/derive.ts';
 import { useStore } from '../../store/store.ts';
+import { conditionKey } from '../../store/overlay.ts';
 
 const ANSWERS: { id: Answer; label: string }[] = [
   { id: 'unset', label: 'Not set' },
@@ -16,7 +17,7 @@ const ANSWERS: { id: Answer; label: string }[] = [
 ];
 
 export function ScenarioPanel({ diagram }: { diagram: Diagram }) {
-  const { setAnswer, toggleDecision, resetScenario, savePreset, applyPreset, deletePreset } = useStore.getState();
+  const { setAnswer, toggleDecision, resetScenario, savePreset, applyPreset, deletePreset, setConditionText } = useStore.getState();
   const [presetName, setPresetName] = useState('');
   const { def, scenario, outcome } = diagram;
   const orderOf = new Map(def.steps.map((s) => [s.id, s.order]));
@@ -94,7 +95,26 @@ export function ScenarioPanel({ diagram }: { diagram: Diagram }) {
                 <span className="rounded-full border border-conditional bg-conditional-subtle px-1.5 font-mono text-[10px] font-bold text-on-conditional-subtle">{c.id}</span>
                 {c.workdayOwned ? 'Workday owned' : 'Custom'} · step {steps}
               </p>
-              <p className="mt-1.5">{c.text}</p>
+              {diagram.conditionText[c.id] ? (
+                <>
+                  <p className="mt-1.5 font-medium">{diagram.conditionText[c.id]}</p>
+                  <p className="mt-0.5 text-xs text-text-secondary">Workday: {c.text}</p>
+                </>
+              ) : (
+                <p className="mt-1.5">{c.text}</p>
+              )}
+              <label className="mt-2 flex flex-col gap-1 text-xs text-text-secondary">
+                In plain words (kept when you re-import)
+                <input
+                  type="text"
+                  value={diagram.overlay.conditionText[conditionKey(c.text)] ?? ''}
+                  onChange={(e) => setConditionText(conditionKey(c.text), e.target.value)}
+                  placeholder="e.g. Transfer was requested"
+                  maxLength={160}
+                  aria-label={`Plain words for ${c.id}`}
+                  className="h-8 rounded-[var(--radius-sm)] border border-border-strong bg-surface px-2 text-[13px] text-text"
+                />
+              </label>
               <div role="radiogroup" aria-label={`Answer for ${c.id}`} className="mt-2 inline-flex rounded-[var(--radius-sm)] border border-border-strong p-0.5">
                 {ANSWERS.map((a) => (
                   <button

@@ -33,6 +33,6 @@ export default defineConfig({
   // Export libraries are imported lazily (DEC-044). Pre-bundle them at dev-server start so the
   // first export doesn't trigger a mid-session re-optimisation, which invalidates already-loaded
   // modules ("Failed to fetch dynamically imported module", DEC-048).
-  optimizeDeps: { include: ['jspdf', 'svg2pdf.js', 'pptxgenjs'] },
+  optimizeDeps: { include: ['jspdf', 'svg2pdf.js', 'pptxgenjs', 'fflate'] },
   build: { target: 'es2022', sourcemap: true },
 });

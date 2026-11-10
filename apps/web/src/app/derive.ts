@@ -14,7 +14,7 @@ import { runRules, type Finding } from '@bpmap/engine-rules';
 import type { Theme } from '@bpmap/design-tokens';
 import type { ProcessDefinition } from '@bpmap/model';
 import { useStore } from '../store/store.ts';
-import { emptyOverlay, type Overlay, type View } from '../store/overlay.ts';
+import { emptyOverlay, plainConditions, type Overlay, type View } from '../store/overlay.ts';
 
 export interface Diagram {
   def: ProcessDefinition;
@@ -28,6 +28,8 @@ export interface Diagram {
   scene: Scene;
   /** All findings for the definition (Health runs on the full definition, not the scenario). */
   findings: Finding[];
+  /** Condition id → the user's plain words (CUS-01); absent = show the Workday text. */
+  conditionText: Record<string, string>;
 }
 
 /** Pure derivation (no React): used by the hook below and by exporters, which always render light (DS §12). */
@@ -44,8 +46,9 @@ export function deriveDiagram(def: ProcessDefinition, overlay: Overlay | undefin
     });
     const L = layout(graph, { nodeHeight: view === 'configurator' ? NODE_HEIGHT.configurator : NODE_HEIGHT.owner });
     const subtitle = outcome.summary ? `${outcome.summary} (${outcome.skipped.size} step${outcome.skipped.size === 1 ? '' : 's'} skipped)` : undefined;
-    const scene = buildExportScene(def, graph, L, theme, { labels: ov.labels, notes: ov.notes, view, ...(subtitle ? { subtitle } : {}) });
-    return { def, overlay: ov, scenario: sc, view, outcome, graph, layout: L, scene, findings: runRules(def) };
+    const conditionText = plainConditions(def.conditions, ov);
+    const scene = buildExportScene(def, graph, L, theme, { labels: ov.labels, notes: ov.notes, conditionText, view, ...(subtitle ? { subtitle } : {}) });
+    return { def, overlay: ov, scenario: sc, view, outcome, graph, layout: L, scene, findings: runRules(def), conditionText };
   }
 }
 

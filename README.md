@@ -4,7 +4,7 @@ See Workday business process definitions as a readable swimlane flow, privately 
 
 > Working product name. Independent product, not affiliated with Workday, Inc. Workday® is a trademark of Workday, Inc.
 
-**Status:** Phase 2, Increment 2.2. Import a Workday *View Definition* Excel export → correct stages, parallel steps, conditions, lanes and decisions → **Executive / Process owner / Configurator** views → **scenario simulation** (answer conditions, see the real path) → **health checks** (HC-01..07, HC-16) → focus on a role or read it as an accessible step list → customise (edits survive re-import; orphaned ones are flagged) → export **PDF, PowerPoint (editable shapes), draw.io**, SVG, PNG or a project file, for one definition or all of them. Everything runs locally: nothing is uploaded, and an e2e test proves it.
+**Status:** Phase 2, Increment 2.3. Import a Workday *View Definition* Excel export → correct stages, parallel steps, conditions, lanes and decisions → **Executive / Process owner / Configurator** views → **scenario simulation** (answer conditions, see the real path) → **health checks** (HC-01..07, HC-16) → focus on a role or read it as an accessible step list → customise, including conditions in plain words (edits survive re-import; orphaned ones are flagged; share them as a customisations file) → export **PDF, PowerPoint (editable shapes), draw.io, Excel**, SVG, PNG or a project file, for one definition or a pack with a cover. Everything runs locally: nothing is uploaded, and an e2e test proves it.
 
 ## Run it
 
@@ -36,7 +36,7 @@ packages/engine-layout   grid placement, gutter routing, decision diamonds, exec
 packages/engine-scenario scenario answers → skipped steps, resolved conditions, presets
 packages/engine-rules    health rules HC-01..07, HC-16
 packages/scene           one display list for canvas background and exports; SVG serialiser
-packages/exporters       scene → draw.io XML and native-shape PowerPoint (pptxgenjs)
+packages/exporters       scene → draw.io XML and native-shape PowerPoint (pptxgenjs); minimal XLSX writer
 packages/design-tokens   colours/type tokens (TS) + Tailwind CSS mirror
 packages/fixtures        SYNTHETIC workbooks + golden snapshot (replace with anonymised real exports)
 archive/prototype-v0     the original AI Studio prototype (not built)

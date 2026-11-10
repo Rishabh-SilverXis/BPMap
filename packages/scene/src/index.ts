@@ -80,6 +80,8 @@ export interface SceneDecor {
   view?: 'executive' | 'owner' | 'configurator';
   /** Appended to the export header, e.g. the active scenario. */
   subtitle?: string;
+  /** Condition id → plain words (CUS-01). The condition list shows them with the Workday text underneath. */
+  conditionText?: Readonly<Record<string, string>>;
 }
 
 /** Node height per view: Configurator boxes carry up to 4 detail lines (DEC-035). */
@@ -413,11 +415,14 @@ export function buildExportScene(def: ProcessDefinition, graph: SemanticGraph, L
       const col = i < half ? 0 : 1;
       const x = M + col * (colWidth + 32);
       const where = [...new Set(c.stepIds.filter((id) => visible.has(id)).map((id) => orderOf.get(id)))].join(', ');
-      const lines = wrapText(c.text, colWidth - 44, 11);
+      const plain = decor.conditionText?.[c.id];
+      const lines = wrapText(plain ?? c.text, colWidth - 44, 11);
+      const original = plain ? wrapText(`Workday: ${c.text}`, colWidth - 44, 10, 400, 2) : [];
       conds.push({ t: 'rect', x, y: colY[col]! - 11, w: 32, h: 15, r: 7.5, fill: tk.conditionBadge.bg, stroke: tk.conditionalBorder, strokeWidth: 1 });
       conds.push({ t: 'text', x: x + 16, y: colY[col]!, text: c.id, size: 10, weight: 700, fill: tk.conditionBadge.text, anchor: 'middle', mono: true });
       lines.forEach((ln, j) => conds.push({ t: 'text', x: x + 42, y: colY[col]! + j * 15, text: ln, size: 11, weight: 500, fill: s.text }));
-      const metaY = colY[col]! + lines.length * 15;
+      original.forEach((ln, j) => conds.push({ t: 'text', x: x + 42, y: colY[col]! + lines.length * 15 + j * 14, text: ln, size: 10, weight: 400, fill: s['text-secondary'] }));
+      const metaY = colY[col]! + lines.length * 15 + original.length * 14;
       conds.push({ t: 'text', x: x + 42, y: metaY, text: `${c.workdayOwned ? 'Workday owned' : 'Custom'}${where ? ` · step ${where}` : ''}`, size: 10, weight: 400, fill: s['text-muted'] });
       colY = col === 0 ? [metaY + 20, colY[1]!] : [colY[0]!, metaY + 20];
     });
@@ -464,3 +469,4 @@ export function toSvg(scene: Scene, title = 'Business process diagram'): string 
     '</svg>',
   ].join('\n');
 }
+export { buildConditionsScene, buildCoverScene, type CoverEntry } from './pages.ts';

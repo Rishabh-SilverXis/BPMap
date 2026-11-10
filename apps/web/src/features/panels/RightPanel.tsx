@@ -13,7 +13,7 @@ import type { Diagram } from '../../app/derive.ts';
 import { useStore, type PanelTab } from '../../store/store.ts';
 import { ScenarioPanel } from './ScenarioPanel.tsx';
 import { buildGraph } from '@bpmap/engine-graph';
-import { findOrphans, orphanCount } from '../../store/overlay.ts';
+import { conditionKey, findOrphans, orphanCount } from '../../store/overlay.ts';
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: 'step', label: 'Step' },
@@ -161,7 +161,8 @@ function StepPanel({ diagram }: { diagram: Diagram }) {
               <li key={c.id} className="flex gap-2 text-[13px]">
                 <span className="h-fit rounded-full border border-conditional bg-conditional-subtle px-1.5 font-mono text-[10px] font-bold text-on-conditional-subtle">{c.id}</span>
                 <span>
-                  {c.text}
+                  {diagram.conditionText[c.id] ?? c.text}
+                  {diagram.conditionText[c.id] && <span className="block text-xs text-text-secondary">Workday: {c.text}</span>}
                   <span className="block text-xs text-text-muted">{c.workdayOwned ? 'Workday owned' : 'Custom: re-check after each Workday release'}</span>
                 </span>
               </li>
@@ -430,7 +431,7 @@ function FindingCard({ f }: { f: Finding }) {
 function OrphanNotice({ diagram }: { diagram: Diagram }) {
   const removeOrphans = useStore((s) => s.removeOrphans);
   const { def, overlay } = diagram;
-  const orphans = findOrphans(overlay, new Set(def.steps.map((s) => s.id)), new Set(buildGraph(def).lanes.map((l) => l.id)));
+  const orphans = findOrphans(overlay, new Set(def.steps.map((s) => s.id)), new Set(buildGraph(def).lanes.map((l) => l.id)), new Set(def.conditions.map((c) => conditionKey(c.text))));
   const n = orphanCount(orphans);
   if (!n) return null;
   const items = [
@@ -438,13 +439,14 @@ function OrphanNotice({ diagram }: { diagram: Diagram }) {
     ...orphans.notes.map((k) => `Note "${overlay.notes[k]}" on ${k}`),
     ...orphans.hidden.map((k) => `Hidden step ${k}`),
     ...orphans.laneNames.map((k) => `Lane name "${overlay.laneNames[k]}" for ${k}`),
+    ...orphans.conditionText.map((k) => `Plain words "${overlay.conditionText[k]}" for the condition "${k}"`),
   ];
   return (
     <section role="status" className="rounded-[var(--radius-md)] border border-warning/50 bg-surface-sunken p-3" data-testid="orphans">
       <h3 className="flex items-center gap-1.5 font-semibold">
         <TriangleAlert className="h-4 w-4 text-warning" aria-hidden /> {n} customisation{n === 1 ? '' : 's'} no longer match a step
       </h3>
-      <p className="mt-1 text-text-secondary">The latest export doesn’t contain these steps or lanes any more (they were renamed, moved to another order letter or removed). They are kept until you decide.</p>
+      <p className="mt-1 text-text-secondary">The latest export doesn’t contain these steps, lanes or conditions any more (they were renamed, moved to another order letter or removed). They are kept until you decide.</p>
       <ul className="mt-2 list-disc pl-5 text-xs text-text-secondary">
         {items.map((t) => (
           <li key={t} className="break-all">

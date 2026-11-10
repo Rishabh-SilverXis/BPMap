@@ -72,6 +72,8 @@ export interface ProjectState {
   setThemePref(pref: ThemePref): void;
   setLabel(stepId: string, label: string): void;
   setNote(stepId: string, note: string): void;
+  /** Plain-word rewrite of a condition; key = conditionKey(Workday text). Empty text clears it. */
+  setConditionText(key: string, text: string): void;
   setHidden(stepId: string, hidden: boolean): void;
   setLaneName(laneId: string, name: string): void;
   dismissFinding(fingerprint: string, reason: string): void;
@@ -80,6 +82,11 @@ export interface ProjectState {
   setFocusLane(laneId: string | null): void;
   setListMode(on: boolean): void;
   removeOrphans(orphans: Orphans): void;
+  /**
+   * Apply a colleague's customisations file to a definition (CUS-03): incoming entries win per key,
+   * everything else is kept; presets are added (same name → replaced). Undoable.
+   */
+  applyCustomisations(definitionId: string, incoming: Overlay, presets: ScenarioState['presets'], view?: View): void;
   setAnswer(conditionId: string, answer: Answer): void;
   toggleDecision(conditionId: string): void;
   resetScenario(): void;
@@ -196,6 +203,31 @@ export const useStore = create<ProjectState>()(
         lastRemoved: null,
         setFocusLane: (laneId) => set({ focusLaneId: laneId }),
         setListMode: (on) => set({ listMode: on }),
+        applyCustomisations(definitionId, incoming, presets, view) {
+          const s = get();
+          undoBoundary(`${definitionId}|customisations|${Date.now()}`);
+          const cur = s.overlays[definitionId] ?? emptyOverlay();
+          const merged: Overlay = {
+            labels: { ...cur.labels, ...incoming.labels },
+            notes: { ...cur.notes, ...incoming.notes },
+            hidden: [...new Set([...cur.hidden, ...incoming.hidden])],
+            laneNames: { ...cur.laneNames, ...incoming.laneNames },
+            dismissedFindings: { ...cur.dismissedFindings, ...incoming.dismissedFindings },
+            conditionText: { ...cur.conditionText, ...incoming.conditionText },
+          };
+          const sc = s.scenarios[definitionId] ?? emptyScenario();
+          const names = new Set(presets.map((p) => p.name.trim().toLowerCase()));
+          const kept = sc.presets.filter((p) => !names.has(p.name.trim().toLowerCase()));
+          const taken = new Set(kept.map((p) => p.id));
+          const scenario = { ...sc, presets: [...kept, ...presets.map((p, i) => (taken.has(p.id) ? { ...p, id: `${p.id}-${Date.now().toString(36)}${i}` } : p))] };
+          set({
+            overlays: { ...s.overlays, [definitionId]: merged },
+            scenarios: { ...s.scenarios, [definitionId]: scenario },
+            ...(view ? { views: { ...s.views, [definitionId]: view } } : {}),
+            activeId: definitionId,
+            selectedStepId: null,
+          });
+        },
         removeOrphans: (orphans) => withOverlay(`orphans|${Date.now()}`, (o) => withoutOrphans(o, orphans)),
 
         async importFiles(files) {
@@ -270,6 +302,13 @@ export const useStore = create<ProjectState>()(
             if (note.trim()) notes[stepId] = note;
             else delete notes[stepId];
             return { ...o, notes };
+          }),
+        setConditionText: (key, text) =>
+          withOverlay(`cond|${key}`, (o) => {
+            const conditionText = { ...o.conditionText };
+            if (text.trim()) conditionText[key] = text;
+            else delete conditionText[key];
+            return { ...o, conditionText };
           }),
         setHidden: (stepId, hidden) =>
           withOverlay(`hidden|${stepId}|${Date.now()}`, (o) => ({ ...o, hidden: hidden ? [...new Set([...o.hidden, stepId])] : o.hidden.filter((x) => x !== stepId) })),

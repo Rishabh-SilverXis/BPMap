@@ -84,13 +84,15 @@ export function projectBlob({ definitions, overlays, scenarios, views }: Project
   return new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
 }
 
-export async function readProjectFile(file: File): Promise<ProjectContents> {
+export async function readProjectFile(file: File, preParsed?: unknown): Promise<ProjectContents> {
   if (file.size > 25 * 1024 * 1024) throw new Error('This project file is too large.');
-  let json: unknown;
-  try {
-    json = JSON.parse(await file.text());
-  } catch {
-    throw new Error('This is not a BPMap project file (invalid JSON).');
+  let json: unknown = preParsed;
+  if (json === undefined) {
+    try {
+      json = JSON.parse(await file.text());
+    } catch {
+      throw new Error('This is not a BPMap project file (invalid JSON).');
+    }
   }
   const f = json as Partial<ProjectFile>;
   if (f.format !== 'bpmap') throw new Error('This is not a BPMap project file.');
@@ -107,6 +109,59 @@ export async function readProjectFile(file: File): Promise<ProjectContents> {
   const views: Record<string, View> = {};
   for (const [k, v] of Object.entries(f.views ?? {})) if (isView(v)) views[k] = v;
   return { definitions: parsed.value.definitions.map(withFreshStageKeys), overlays, scenarios, views };
+}
+
+/* ---------------------------------------------------------------- customisations file (CUS-03) */
+
+/**
+ * Only the customisations for ONE definition: no Workday data except the process name it belongs to,
+ * so a colleague can apply them to their own export of the same process (DEC-050).
+ */
+export interface CustomisationsFile {
+  format: 'bpmap-customisations';
+  schemaVersion: 1;
+  exportedAt: string;
+  definition: { process: string; variant: string };
+  overlay: Overlay;
+  presets: ScenarioState['presets'];
+  view?: View;
+}
+
+export function customisationsBlob(def: ProcessDefinition, overlay: Overlay, scenario: ScenarioState | undefined, view: View | undefined): Blob {
+  const file: CustomisationsFile = {
+    format: 'bpmap-customisations',
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    definition: { process: def.process, variant: def.variant },
+    overlay,
+    presets: scenario?.presets ?? [],
+    ...(view ? { view } : {}),
+  };
+  return new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
+}
+
+export const sameDefinition = (a: { process: string; variant: string }, b: { process: string; variant: string }) =>
+  a.process.trim().toLowerCase() === b.process.trim().toLowerCase() && a.variant.trim().toLowerCase() === b.variant.trim().toLowerCase();
+
+export type OpenedFile = { kind: 'project'; contents: ProjectContents } | { kind: 'customisations'; file: CustomisationsFile };
+
+/** "Open" accepts a project file or a customisations file; the format field decides. */
+export async function readBpmapFile(file: File): Promise<OpenedFile> {
+  if (file.size > 25 * 1024 * 1024) throw new Error('This file is too large.');
+  let json: unknown;
+  try {
+    json = JSON.parse(await file.text());
+  } catch {
+    throw new Error('This is not a BPMap file (invalid JSON).');
+  }
+  const f = json as Partial<CustomisationsFile>;
+  if (f?.format !== 'bpmap-customisations') return { kind: 'project', contents: await readProjectFile(file, json) };
+  if (f.schemaVersion !== 1) throw new Error(`Customisations file version ${f.schemaVersion} is not supported by this version of BPMap.`);
+  const overlay = normaliseOverlay(f.overlay);
+  const d = f.definition;
+  if (!overlay || !d || typeof d.process !== 'string' || typeof d.variant !== 'string') throw new Error('The customisations file is damaged.');
+  const presets = isScenarioState({ answers: {}, decisions: [], presets: f.presets }) ? f.presets! : [];
+  return { kind: 'customisations', file: { format: 'bpmap-customisations', schemaVersion: 1, exportedAt: String(f.exportedAt ?? ''), definition: { process: d.process, variant: d.variant }, overlay, presets, ...(isView(f.view) ? { view: f.view } : {}) } };
 }
 
 /* ---------------------------------------------------------------- Increment 2.2 formats (lazy) */

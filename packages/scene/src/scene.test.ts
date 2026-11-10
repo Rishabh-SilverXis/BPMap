@@ -3,7 +3,7 @@ import { readFixture } from '@bpmap/fixtures';
 import { importWorkbook } from '@bpmap/importer-xlsx';
 import { buildGraph } from '@bpmap/engine-graph';
 import { layout } from '@bpmap/engine-layout';
-import { buildExportScene, toSvg, wrapText, type SceneItem } from './index.ts';
+import { buildConditionsScene, buildCoverScene, buildExportScene, toSvg, wrapText, type SceneItem } from './index.ts';
 
 const r = importWorkbook(readFixture('changeJob'), { importedAt: '2026-11-10T00:00:00.000Z' });
 if (r.status !== 'ok') throw new Error('fixture failed to import');
@@ -86,5 +86,52 @@ describe('executive captions and header on the real Workday layout (F-01..F-03, 
     const header = svgOf(ex, 'x');
     expect(header).toContain('effective 2026-11-10');
     expect(header).toContain('overall due 1 Week');
+  });
+});
+
+describe('plain-word conditions in the condition list (CUS-01, US-07)', () => {
+  const c1 = r.definition.conditions[0]!;
+  const texts = (s: ReturnType<typeof buildExportScene>) =>
+    flat(s.items.filter((i) => i.t === 'group' && i.role === 'conditions'))
+      .filter((i): i is Extract<SceneItem, { t: 'text' }> => i.t === 'text')
+      .map((t) => t.text);
+
+  it('shows the plain words first and keeps the Workday text underneath', () => {
+    const t = texts(buildExportScene(r.definition, g, L, 'light', { conditionText: { [c1.id]: 'Transfer was requested' } }));
+    const i = t.indexOf('Transfer was requested');
+    expect(i).toBeGreaterThan(0);
+    expect(t[i + 1]).toMatch(/^Workday: /);
+  });
+
+  it('without plain words the list is unchanged', () => {
+    expect(texts(buildExportScene(r.definition, g, L))).toEqual(texts(buildExportScene(r.definition, g, L, 'light', { conditionText: {} })));
+  });
+});
+
+describe('extra export pages (EXP-03, PCK-03)', () => {
+  const textsOf = (sc: { items: SceneItem[] }) => flat(sc.items).filter((i): i is Extract<SceneItem, { t: 'text' }> => i.t === 'text').map((t) => t.text);
+
+  it('conditions page: every condition with its badge, plain words first, 16:9 at least', () => {
+    const c1 = r.definition.conditions[0]!;
+    const page = buildConditionsScene(r.definition, 'light', { [c1.id]: 'Transfer was requested' })!;
+    const t = textsOf(page);
+    for (const c of r.definition.conditions) expect(t).toContain(c.id);
+    expect(t.indexOf('Transfer was requested')).toBeLessThan(t.findIndex((x) => x.startsWith('Workday: ')));
+    expect(page.width).toBe(1600);
+    expect(page.height).toBeGreaterThanOrEqual(900);
+    expect(toSvg(page)).toContain('Conditions');
+  });
+
+  it('no conditions → no page', () => {
+    expect(buildConditionsScene({ ...r.definition, conditions: [] })).toBeNull();
+  });
+
+  it('cover lists every definition with its health counts and grows for long packs', () => {
+    const entry = { name: 'Change Job', view: 'Process owner', summary: '18 steps', health: { critical: 1, warning: 2, info: 0 } };
+    const cover = buildCoverScene({ title: 'Pack', date: '11 November 2026', entries: [entry, { ...entry, name: 'Hire', health: { critical: 0, warning: 0, info: 0 } }] });
+    const t = textsOf(cover);
+    expect(t).toEqual(expect.arrayContaining(['Pack', 'Change Job', 'Hire', '1 · 2 · 0', 'No findings']));
+    const long = buildCoverScene({ title: 'Pack', date: 'd', entries: Array.from({ length: 30 }, (_, i) => ({ ...entry, name: `Process ${i}` })) });
+    expect(long.height).toBeGreaterThan(900);
   });
 });

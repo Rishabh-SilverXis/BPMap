@@ -78,7 +78,8 @@ test('exports: PDF, PowerPoint, draw.io, SVG, PNG and packs download as valid fi
   const pdf = await grab(/^PDF Vector/);
   expect(pdf.name).toMatch(/\.pdf$/);
   expect(pdf.bytes.subarray(0, 5).toString()).toBe('%PDF-');
-  const pptx = await grab(/^PowerPoint Every/);
+  expect((pdf.bytes.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length).toBe(2); // diagram + conditions
+  const pptx = await grab(/^PowerPoint Editable/);
   expect(pptx.bytes.subarray(0, 2).toString()).toBe('PK'); // OOXML zip
   const drawio = await grab(/^draw\.io \(for Visio\)/);
   expect(drawio.bytes.toString()).toContain('<mxfile');
@@ -94,9 +95,16 @@ test('exports: PDF, PowerPoint, draw.io, SVG, PNG and packs download as valid fi
   await expect(page.locator('[aria-current=page]')).toContainText('Synthetic');
   const packPdf = await grab(/^PDF pack/);
   expect(packPdf.bytes.subarray(0, 5).toString()).toBe('%PDF-');
-  expect((packPdf.bytes.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length).toBe(2);
+  // cover + (diagram + conditions page) for each of the 2 definitions (PCK-03, DEC-051)
+  expect((packPdf.bytes.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length).toBe(5);
   const packPptx = await grab(/^PowerPoint pack/);
   expect(packPptx.bytes.subarray(0, 2).toString()).toBe('PK');
+  const { unzipSync } = await import('fflate');
+  const slides = Object.keys(unzipSync(new Uint8Array(packPptx.bytes))).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f));
+  expect(slides).toHaveLength(5);
+  const packXlsx = await grab(/^Excel pack/);
+  expect(packXlsx.name).toBe('bpmap-pack.xlsx');
+  expect(packXlsx.bytes.subarray(0, 2).toString()).toBe('PK');
 });
 
 test('focus on a role dims every other lane (VIS-08)', async ({ page }) => {
@@ -165,4 +173,64 @@ test('closing a definition removes it at once and Undo brings it back with its e
   await page.getByRole('button', { name: /^Close / }).click();
   await page.reload();
   await expect(page.locator('[data-testid=step]')).toHaveCount(0); // stays closed after reload
+});
+
+const grabDownload = async (page: import('@playwright/test').Page, item: RegExp) => {
+  const { readFileSync } = await import('node:fs');
+  await page.getByText('Export', { exact: true }).click();
+  const dl = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: item }).click();
+  const d = await dl;
+  return { name: d.suggestedFilename(), path: (await d.path())!, bytes: readFileSync((await d.path())!) };
+};
+
+test('plain-word conditions show in the condition list, survive re-import and reach Excel (CUS-01, US-07, EXP-08)', async ({ page }) => {
+  await page.getByRole('tab', { name: /Scenario/ }).click();
+  await page.getByLabel('Plain words for C1', { exact: true }).fill('Transfer was requested');
+  const list = page.locator('svg g[data-role=conditions]').first();
+  await expect(list).toContainText('Transfer was requested');
+  await expect(list).toContainText('Workday: ');
+  await page.waitForTimeout(700); // autosave
+  await importFile(page, 'change-job-workday-layout.xlsx'); // same export again
+  await page.getByRole('tab', { name: /Scenario/ }).click();
+  await expect(page.getByLabel('Plain words for C1', { exact: true })).toHaveValue('Transfer was requested');
+
+  const xlsx = await grabDownload(page, /^Excel Steps/);
+  expect(xlsx.name).toMatch(/\.xlsx$/);
+  const { unzipSync, strFromU8 } = await import('fflate');
+  const files = unzipSync(new Uint8Array(xlsx.bytes));
+  const workbook = strFromU8(files['xl/workbook.xml']!);
+  expect(workbook).toContain('name="Steps"');
+  expect(workbook).toContain('name="Conditions"');
+  expect(workbook).toContain('name="Health"');
+  expect(strFromU8(files['xl/worksheets/sheet2.xml']!)).toContain('Transfer was requested');
+  expect((strFromU8(files['xl/worksheets/sheet1.xml']!).match(/<row /g) ?? []).length).toBe(27); // header + 26 steps
+});
+
+test('customisations file carries edits (not Workday data) to another browser (CUS-03)', async ({ page, browser }) => {
+  await page.locator('[data-testid=step]', { hasText: 'Assign Pay Group' }).click();
+  await page.getByLabel('Note (shows as N on the step)').fill('Payroll owns this');
+  await page.getByRole('tab', { name: /Scenario/ }).click();
+  await page.getByLabel('Plain words for C1', { exact: true }).fill('Transfer was requested');
+  const file = await grabDownload(page, /^Customisations only/);
+  expect(file.name).toMatch(/\.customisations\.json$/);
+  const json = JSON.parse(file.bytes.toString());
+  expect(json.format).toBe('bpmap-customisations');
+  expect(json).not.toHaveProperty('steps');
+  expect(JSON.stringify(json)).not.toContain('Payroll Partner'); // no security groups / Workday rows
+
+  const ctx = await browser.newContext();
+  const p2 = await ctx.newPage();
+  await freshApp(p2);
+  await importFile(p2, 'change-job-synthetic.xlsx'); // a different definition first
+  await p2.locator('input[type=file][accept*="json"]').setInputFiles(file.path);
+  await expect(p2.getByRole('status')).toContainText('Import that definition first');
+  await importFile(p2, 'change-job-workday-layout.xlsx');
+  await expect(p2.locator('[data-testid=step]')).toHaveCount(26);
+  await p2.locator('input[type=file][accept*="json"]').setInputFiles(file.path);
+  await expect(p2.getByRole('status')).toContainText('Opened');
+  await p2.locator('[data-testid=step]', { hasText: 'Assign Pay Group' }).click();
+  await expect(p2.getByLabel('Note (shows as N on the step)')).toHaveValue('Payroll owns this');
+  await expect(p2.locator('svg g[data-role=conditions]').first()).toContainText('Transfer was requested');
+  await ctx.close();
 });

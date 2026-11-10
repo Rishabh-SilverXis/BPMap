@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent as Reac
 import { Undo2, Redo2, Download, Copy, FolderOpen, X, Check, Loader2, Plus, ChevronDown, ScanSearch, List, ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 import { useStore as useZustand } from 'zustand';
-import { summaryLine } from '@bpmap/scene';
+import { buildConditionsScene, buildCoverScene, summaryLine } from '@bpmap/scene';
 import type { Theme } from '@bpmap/design-tokens';
 import { useActiveDefinition, useActiveOverlay, useActiveScenario, useActiveView, useStore } from '../store/store.ts';
 import type { View } from '../store/overlay.ts';
@@ -15,8 +15,10 @@ import { DropZone } from '../features/import/ImportScreen.tsx';
 import { DiagramViewer } from '../features/canvas/DiagramViewer.tsx';
 import { StepList } from '../features/canvas/StepList.tsx';
 import { RightPanel } from '../features/panels/RightPanel.tsx';
-import { copyPng, download, drawioBlob, fileBase, pdfBlob, pngBlob, pptxBlob, projectBlob, readProjectFile, svgBlob, type ExportPage } from '../features/export/exporters.ts';
+import { copyPng, customisationsBlob, download, drawioBlob, fileBase, pdfBlob, pngBlob, pptxBlob, projectBlob, readBpmapFile, sameDefinition, svgBlob, type ExportPage } from '../features/export/exporters.ts';
 import type { ProcessDefinition } from '@bpmap/model';
+import { runRules } from '@bpmap/engine-rules';
+import { xlsxBlob } from '../features/export/workbook.ts';
 
 export type Toast = { kind: 'ok' | 'error'; text: string } | null;
 
@@ -135,6 +137,16 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
   const scenarios = useStore((s) => s.scenarios);
   const views = useStore((s) => s.views);
   const replaceProject = useStore((s) => s.replaceProject);
+  const applyCustomisations = useStore((s) => s.applyCustomisations);
+  const openFile = async (f: File) => {
+    const opened = await readBpmapFile(f);
+    if (opened.kind === 'project') return replaceProject(opened.contents);
+    const c = opened.file;
+    const target = sameDefinition(diagram.def, c.definition) ? diagram.def : definitions.find((d) => sameDefinition(d, c.definition));
+    const name = c.definition.variant ? `${c.definition.process} (${c.definition.variant})` : c.definition.process;
+    if (!target) throw new Error(`These customisations are for “${name}”. Import that definition first, then open the file again.`);
+    applyCustomisations(target.id, c.overlay, c.presets, c.view);
+  };
   const openInput = useRef<HTMLInputElement>(null);
   const menu = useRef<HTMLDetailsElement>(null);
   const base = fileBase(diagram.def);
@@ -152,13 +164,26 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
     const next = roleIndex < 0 ? (delta > 0 ? 0 : roleSteps.length - 1) : (roleIndex + delta + roleSteps.length) % roleSteps.length;
     select(roleSteps[next]!);
   };
-  // Exports are always rendered light (DS §12), whatever the screen theme (DEC-046).
-  const page = (): ExportPage => ({ title: `${titleOf(diagram.def)} · ${VIEW_LABEL[diagram.view]}`, scene: deriveDiagram(diagram.def, diagram.overlay, diagram.scenario, diagram.view, 'light').scene });
-  const pack = (): ExportPage[] =>
-    definitions.map((d) => {
-      const v = views[d.id] ?? 'owner';
-      return { title: `${titleOf(d)} · ${VIEW_LABEL[v]}`, scene: deriveDiagram(d, overlays[d.id], scenarios[d.id], v, 'light').scene };
+  // Exports are always rendered light (DS §12), whatever the screen theme (DEC-046). Multi-page
+  // formats add a readable conditions page after each diagram; packs open with a cover (DEC-051).
+  const pagesFor = (d: ProcessDefinition, withConditions: boolean): ExportPage[] => {
+    const v = views[d.id] ?? 'owner';
+    const dg = deriveDiagram(d, overlays[d.id], scenarios[d.id], v, 'light');
+    const conds = withConditions ? buildConditionsScene(d, 'light', dg.conditionText) : null;
+    return [{ title: `${titleOf(d)} · ${VIEW_LABEL[v]}`, scene: dg.scene }, ...(conds ? [{ title: `${titleOf(d)} · Conditions`, scene: conds }] : [])];
+  };
+  const page = (): ExportPage => pagesFor(diagram.def, false)[0]!;
+  const pages = (): ExportPage[] => pagesFor(diagram.def, true);
+  const pack = (withConditions = true): ExportPage[] => {
+    const entries = definitions.map((d) => {
+      const dg = deriveDiagram(d, overlays[d.id], scenarios[d.id], views[d.id] ?? 'owner', 'light');
+      const open = dg.findings.filter((f) => !dg.overlay.dismissedFindings[f.fingerprint]);
+      const count = (sev: string) => open.filter((f) => f.severity === sev).length;
+      return { name: titleOf(d), view: VIEW_LABEL[dg.view], summary: summaryLine(d, dg.graph), health: { critical: count('critical'), warning: count('warning'), info: count('info') } };
     });
+    const cover = buildCoverScene({ title: 'Business process pack', date: new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }), entries }, 'light');
+    return [{ title: 'Contents', scene: cover }, ...definitions.flatMap((d) => pagesFor(d, withConditions))];
+  };
 
   const run = async (fn: () => Promise<void> | void, ok: string) => {
     menu.current?.removeAttribute('open');
@@ -226,8 +251,8 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
         <ToolButton onClick={() => void run(() => copyPng(diagram.def, page().scene), 'Image copied to the clipboard')} label="Copy image">
           <Copy className="h-4 w-4" /> <span className="hidden xl:inline">Copy image</span>
         </ToolButton>
-        <ToolButton onClick={() => openInput.current?.click()} label="Open a .bpmap.json project file">
-          <FolderOpen className="h-4 w-4" /> <span className="hidden xl:inline">Open project</span>
+        <ToolButton onClick={() => openInput.current?.click()} label="Open a project or customisations file (.json)">
+          <FolderOpen className="h-4 w-4" /> <span className="hidden xl:inline">Open</span>
         </ToolButton>
         <input
           ref={openInput}
@@ -238,7 +263,7 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
           onChange={(e) => {
             const f = e.target.files?.[0];
             e.target.value = '';
-            if (f) void run(async () => replaceProject(await readProjectFile(f)), `Opened ${f.name}`);
+            if (f) void run(() => openFile(f), `Opened ${f.name}`);
           }}
         />
         <details ref={menu} className="relative">
@@ -248,9 +273,10 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
           <div role="menu" className="absolute right-0 z-40 mt-1 max-h-[70vh] w-72 overflow-auto rounded-[var(--radius-md)] border border-border bg-surface p-1 shadow-[var(--shadow-e3)]">
             <MenuHeading>This view · {VIEW_LABEL[diagram.view]}</MenuHeading>
             {[
-              { label: 'PDF', hint: 'Vector, sharp at any size, for documents and print', fn: async () => download(await pdfBlob([page()]), `${base}.pdf`), ok: 'PDF downloaded' },
-              { label: 'PowerPoint', hint: 'Every box and line is an editable shape', fn: async () => download(await pptxBlob([page()], titleOf(diagram.def)), `${base}.pptx`), ok: 'PowerPoint downloaded' },
-              { label: 'draw.io (for Visio)', hint: 'Edit in diagrams.net, save as Visio or open in Lucidchart', fn: async () => download(await drawioBlob([page()]), `${base}.drawio`), ok: 'draw.io file downloaded' },
+              { label: 'PDF', hint: 'Vector, sharp at any size; diagram + conditions page', fn: async () => download(await pdfBlob(pages()), `${base}.pdf`), ok: 'PDF downloaded' },
+              { label: 'PowerPoint', hint: 'Editable shapes; diagram + conditions slide', fn: async () => download(await pptxBlob(pages(), titleOf(diagram.def)), `${base}.pptx`), ok: 'PowerPoint downloaded' },
+              { label: 'draw.io (for Visio)', hint: 'Edit in diagrams.net, save as Visio or open in Lucidchart', fn: async () => download(await drawioBlob(pages()), `${base}.drawio`), ok: 'draw.io file downloaded' },
+              { label: 'Excel', hint: 'Steps, conditions and health findings as sheets (full definition)', fn: async () => download(await xlsxBlob([{ def: diagram.def, overlay: diagram.overlay, findings: diagram.findings }], titleOf(diagram.def)), `${base}.xlsx`), ok: 'Excel workbook downloaded' },
               { label: 'SVG', hint: 'Vector image for web pages and wikis', fn: () => download(svgBlob(diagram.def, page().scene), `${base}.svg`), ok: 'SVG downloaded' },
               { label: 'PNG (2×)', hint: 'For chat, email and slides', fn: async () => download(await pngBlob(diagram.def, page().scene), `${base}.png`), ok: 'PNG downloaded' },
             ].map((m) => (
@@ -258,11 +284,12 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
             ))}
             {definitions.length > 1 && (
               <>
-                <MenuHeading>All {definitions.length} definitions · one page each</MenuHeading>
+                <MenuHeading>All {definitions.length} definitions · with a cover</MenuHeading>
                 {[
-                  { label: 'PDF pack', hint: 'Each definition in its saved view', fn: async () => download(await pdfBlob(pack()), 'bpmap-pack.pdf'), ok: 'PDF pack downloaded' },
-                  { label: 'PowerPoint pack', hint: 'One editable slide per definition', fn: async () => download(await pptxBlob(pack(), 'BPMap pack'), 'bpmap-pack.pptx'), ok: 'PowerPoint pack downloaded' },
-                  { label: 'draw.io pack', hint: 'One page per definition', fn: async () => download(await drawioBlob(pack()), 'bpmap-pack.drawio'), ok: 'draw.io pack downloaded' },
+                  { label: 'PDF pack', hint: 'Cover with contents and health, then each definition in its saved view', fn: async () => download(await pdfBlob(pack()), 'bpmap-pack.pdf'), ok: 'PDF pack downloaded' },
+                  { label: 'PowerPoint pack', hint: 'Cover slide, then diagram + conditions per definition', fn: async () => download(await pptxBlob(pack(), 'BPMap pack'), 'bpmap-pack.pptx'), ok: 'PowerPoint pack downloaded' },
+                  { label: 'Excel pack', hint: 'All definitions in one workbook, with a Definition column', fn: async () => download(await xlsxBlob(definitions.map((d) => ({ def: d, overlay: overlays[d.id], findings: runRules(d) })), 'BPMap pack'), 'bpmap-pack.xlsx'), ok: 'Excel pack downloaded' },
+                  { label: 'draw.io pack', hint: 'Cover page, then diagram + conditions per definition', fn: async () => download(await drawioBlob(pack()), 'bpmap-pack.drawio'), ok: 'draw.io pack downloaded' },
                 ].map((m) => (
                   <MenuItem key={m.label} {...m} onRun={run} />
                 ))}
@@ -270,6 +297,7 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
             )}
             <MenuHeading>Project</MenuHeading>
             <MenuItem label="Project file" hint="All definitions + customisations + scenarios (.bpmap.json)" fn={() => download(projectBlob({ definitions, overlays, scenarios, views }), `${base}.bpmap.json`)} ok="Project file downloaded" onRun={run} />
+            <MenuItem label="Customisations only" hint="Labels, notes, plain-word conditions and presets for this definition; no Workday data" fn={() => download(customisationsBlob(diagram.def, diagram.overlay, scenarios[diagram.def.id], views[diagram.def.id]), `${base}.customisations.json`)} ok="Customisations downloaded" onRun={run} />
           </div>
         </details>
       </div>

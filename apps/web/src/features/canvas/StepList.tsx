@@ -13,7 +13,7 @@ export function StepList({ diagram }: { diagram: Diagram }) {
   const selected = useStore((s) => s.selectedStepId);
   const { graph, def, overlay, outcome } = diagram;
   const laneLabel = new Map(graph.lanes.map((l) => [l.id, l.label]));
-  const condText = new Map(def.conditions.map((c) => [c.id, c.text]));
+  const condText = new Map(def.conditions.map((c) => [c.id, diagram.conditionText[c.id] ?? c.text]));
   const total = Object.keys(graph.steps).length;
 
   return (

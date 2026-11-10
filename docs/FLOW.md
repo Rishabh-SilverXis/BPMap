@@ -8,9 +8,9 @@ Legend: `→` calls / passes data to · `⇢` async (worker message, promise, ti
 
 ## Current work
 
-> **Phase 2 · Increment 2.2 ✅ complete** (DEC-044..048): PDF / PowerPoint / draw.io exports and packs, persistence split off the entry chunk (169 → 81 KB gzip), re-import reconciliation of orphaned customisations, focus a role, accessible step list. 128 unit + 16 e2e tests. Follow-up fixes (DEC-048): close with Undo, focus scrolls to the role, export libraries pre-bundled in dev.
+> **Phase 2 · Increment 2.3 ✅ complete** (DEC-049..051): plain-word conditions, customisations file, Excel export, conditions page/slide and pack cover. 136 unit + 18 e2e tests.
 >
-> ⏭ **Increment 2.3** (per PRD): condition-rule import (IMP-09), frozen stage-header row, comparison of two definitions.
+> ⏭ **Increment 2.4** (closes Phase 2): multi-file import with subprocess linking (IMP-04), manual layout nudges (VIS-11), scenario presets keyed by condition text.
 >
 > No path is being modified at the moment.
 
@@ -176,7 +176,10 @@ useStore.subscribe((s, prev) => …)                         persistence/db.ts
 ```
 Toolbar ▸ Export menu → run(fn, okText) → toast                     app/Workspace.tsx
  page()  = { name, scene } for the active definition, derived with theme 'light' (DEC-046)
- pack()  = page() for every definition: deriveDiagram(def, overlay, scenario, view, 'light')   app/derive.ts
+ pagesFor(def, withConditions) = deriveDiagram(def, overlay, scenario, view, 'light')            app/derive.ts
+            → [diagram scene, buildConditionsScene(def, 'light', plainWords)?]                    packages/scene/pages.ts
+ page()  = pagesFor(active)[0]  (SVG / PNG)    pages() = pagesFor(active, true)  (PDF / PowerPoint / draw.io)
+ pack()  = [buildCoverScene(entries: name, view, summary, open findings), ...pagesFor(each, true)]
  │
  ├ This view ▸ PDF        ⇢ import('./pdf.ts') → pdfBlob([page]) → toSvg → toWinAnsi(text)
  │                           → jspdf + svg2pdf (lazy, ~150 KB) → one page per scene
@@ -185,10 +188,16 @@ Toolbar ▸ Export menu → run(fn, okText) → toast                     app/Wo
  ├ This view ▸ draw.io    ⇢ toDrawio([page]) → flatten(scene) → escaped mxCell XML → .drawio
  ├ This view ▸ SVG / PNG  → svgBlob(def, scene) → toSvg  ·  pngBlob: svg → <img> → canvas 2×
  ├ All N definitions ▸ PDF / PowerPoint / draw.io → same functions with pack() (one page/slide each)
+ ├ This view ▸ Excel      ⇢ xlsxBlob([{def, overlay, findings}]) → workbookSheets (Steps · Conditions · Health)
+ │                           ⇢ import('@bpmap/exporters') → buildXlsx(sheets) → fflate zipSync  features/export/workbook.ts
+ ├ All N ▸ Excel pack      → same with every definition (+ Definition column)
  ├ Copy image             → navigator.clipboard.write([ClipboardItem({'image/png': pngBlob(...)})])
  ├ Project ▸ file         → projectBlob(definitions, overlays) → .bpmap.json
- └ Open project           → readProjectFile(file): size ≤ 25 MB → JSON.parse → format/version check
-                             → parseProject (zod) → isOverlay → store.replaceProject (untracked)
+ ├ Project ▸ Customisations only → customisationsBlob(def, overlay, scenario, view) → .customisations.json
+ └ Open                   → readBpmapFile(file): size ≤ 25 MB → JSON.parse → format?
+       ├ 'bpmap'                → readProjectFile → parseProject (zod) → store.replaceProject (untracked)
+       └ 'bpmap-customisations' → normaliseOverlay → match def by process+variant (sameDefinition)
+                                  → store.applyCustomisations (merge, one undo step) | error "Import that definition first"
 ```
 
 ## 6a. Re-import, focus, step list ✅
@@ -204,6 +213,9 @@ Toolbar ▸ Focus on a role → store.setFocusLane(id) → DiagramViewer: dimmed
        → Toolbar ‹ › stepper: roleSteps (lane nodes by x, y) → store.select(id) → viewer centres it
 DefinitionTabs ▸ × → store.removeDefinition (untracked; stash in lastRemoved; clear undo history)
        → App toast "Closed … · Undo" (10 s) → store.restoreRemoved (same tab index) | forgetRemoved
+Scenario panel ▸ In plain words → store.setConditionText(conditionKey(text), words) → overlay.conditionText
+       → deriveDiagram: plainConditions(def.conditions, overlay) → Diagram.conditionText + scene decor
+       → condition list / panels / step list / Excel / conditions page show plain words + "Workday: …"
 Toolbar ▸ Step list → store.setListMode → Workspace renders StepList (table, tbody per stage)
        instead of DiagramViewer; step button → store.select(stepId) → right panel
 ```

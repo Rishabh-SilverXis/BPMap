@@ -395,3 +395,41 @@ Phase 2 ("Parity+") is split in two. **2.1** (this increment) covers views (VW-0
   - The production build was never affected, which is why the e2e suite (run on `vite preview`) passed.
   - Lesson: verify new lazy dependencies on the dev server too, not only on the build.
 - **Tests:** e2e +2 (focus scrolls to Assign Pay Group and the stepper selects it; close → toast → Undo restores the note → close → reload stays closed). 16 e2e tests in total. Dev-server check: PDF, PowerPoint and draw.io each downloaded.
+
+# Phase 2 · Increment 2.3: customise & hand off (2026-11-11)
+
+Scope: the remaining Phase 2 P1 items that are about handing work to other people: CUS-01 (plain-word conditions), CUS-03 (customisations file), EXP-08 (Excel), EXP-03 (conditions slide) and PCK-03 (pack cover). Deferred to Increment 2.4: IMP-04 (subprocess linking) and VIS-11 (layout nudges).
+
+## DEC-049 · Plain-word conditions are keyed by the Workday condition text, not by "Cn"
+- **Date:** 2026-11-11 · **Serves:** CUS-01, US-07, CUS-02
+- **Decision:**
+  - New overlay field `conditionText: Record<conditionKey, string>`, where `conditionKey` is the Workday text lower-cased with collapsed whitespace.
+  - `plainConditions()` maps it to `conditionId → words` for one derivation. The scene, Scenario panel, Step panel, step list, Excel export and conditions page all show the plain words first, with "Workday: <original>" underneath. The original is never hidden.
+  - The Scenario panel has an "In plain words" field per condition (coalesced undo per field, like labels).
+  - A re-import that no longer contains the condition text lists the rewrite as an orphan (DEC-047).
+- **Why not the C-number:** C-numbers follow stage order (DEC-010), so adding a step earlier in the process renumbers every later condition. Keyed by C-number, rewrites would silently attach to the wrong condition after a re-import, which is worse than losing them. The condition text changes only when the rule itself changes, and then the rewrite *should* be reviewed.
+- **Old data:** stored overlays and project files without the field load with `{}` (`normaliseOverlay`).
+
+## DEC-050 · A customisations file separate from the project file
+- **Date:** 2026-11-11 · **Serves:** CUS-03, SCN-03 ("exportable presets")
+- **Decision:**
+  - Export ▸ Project ▸ "Customisations only" writes `<name>.customisations.json` (`format: 'bpmap-customisations'`) containing the overlay, scenario presets and saved view for **one** definition, plus its process name and variant. It contains no steps, groups or conditions.
+  - "Open" (formerly "Open project") accepts either file type and branches on `format`.
+  - A customisations file is applied to the open definition with the same process + variant (case-insensitive), else any loaded one; otherwise it fails with "Import that definition first".
+  - Applying **merges**: incoming entries win per key, everything else is kept, and presets with the same name are replaced. It is one undo step.
+- **Why:** Consultants share edits with colleagues who already have the export (often a newer one) from their own tenant. Sending the project file would overwrite their definition and spread tenant data further than needed. Merging rather than replacing means applying a colleague's file never deletes your own work.
+- **Limit:** presets store answers by C-number, so they can point at the wrong condition if the colleague's export numbers conditions differently. Keying preset answers by condition text (as in DEC-049) is a follow-up.
+
+## DEC-051 · Excel writer, conditions page and pack cover, built as scenes
+- **Date:** 2026-11-11 · **Serves:** EXP-08, EXP-03, PCK-03
+- **Excel:**
+  - `packages/exporters/src/xlsx.ts` is a ~100-line SpreadsheetML writer on `fflate` (already a dependency). No exceljs/SheetJS in the app: they would add ≥ 300 KB, and SheetJS's npm distribution is outdated.
+  - Text is written as **inline strings**, which Excel never evaluates, so `=HYPERLINK(...)` in a step name stays text (no formula injection). The header row is bold, frozen and filtered. XML-invalid control characters are dropped.
+  - Sheets: Steps (full definition in stage order, with label, note and hidden flag), Conditions (plain words + Workday text), Health (findings by severity with dismissal reasons). Packs add a Definition column.
+  - Tested by a round trip through our own importer's XLSX reader.
+  - The workbook ignores the scenario on purpose: it is the reference copy people filter, while the diagram is the case view.
+- **Conditions page:** `buildConditionsScene` is a 16:9 page listing every condition at 17 px (one or two columns), plain words first. PDF, PowerPoint and draw.io exports of a view now produce diagram + conditions; SVG and PNG stay single images.
+  - Why: on a 26-stage process, the condition list under the diagram is shrunk to fit the slide and becomes unreadable.
+- **Pack cover:** `buildCoverScene` shows title, date and contents (name, summary, view) with open findings per definition (critical · warning · info; dismissed ones excluded).
+- **Why scenes:** each page is an ordinary `Scene`, so every exporter renders it with no format-specific code, and the cover looks the same in PDF, PowerPoint and draw.io.
+- **Dev server:** `fflate` added to `optimizeDeps.include` (it is now lazily used on the main thread as well as in the worker; see DEC-048).
