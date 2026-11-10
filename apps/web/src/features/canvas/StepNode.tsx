@@ -9,14 +9,15 @@ import type { Step } from '@bpmap/model';
 import { nodeStyleOf, stepKindTag, stepTitle } from '@bpmap/scene';
 import type { NodeTokens } from '@bpmap/design-tokens';
 
-export type StepNodeData = { step: Step; label?: string; note?: string; tokens: NodeTokens; surface: string };
+export type StepNodeData = { step: Step; openConditionIds: string[]; label?: string; note?: string; meta?: string[]; tokens: NodeTokens; surface: string };
 export type StepFlowNode = Node<StepNodeData, 'step'>;
 
 export const StepNode = memo(function StepNode({ data, width, height }: NodeProps<StepFlowNode>) {
   const { step, tokens: tk } = data;
   const t = tk[nodeStyleOf(step.kind)];
-  const conditional = step.conditionIds.length > 0;
-  const ids = step.conditionIds.length > 3 ? [...step.conditionIds.slice(0, 2), `+${step.conditionIds.length - 2}`] : step.conditionIds;
+  const open = data.openConditionIds;
+  const conditional = open.length > 0; // unresolved in the current scenario (DEC-034)
+  const ids = open.length > 3 ? [...open.slice(0, 2), `+${open.length - 2}`] : open;
   return (
     <div
       className="bpm-step relative rounded-[6px] px-[10px] py-[9px] transition-shadow hover:shadow-[var(--shadow-e2)]"
@@ -34,6 +35,15 @@ export const StepNode = memo(function StepNode({ data, width, height }: NodeProp
       <div className="mt-[7px] line-clamp-2 text-[13px] font-semibold leading-[17px]" title={stepTitle(step, data.label)}>
         {stepTitle(step, data.label)}
       </div>
+      {data.meta && data.meta.length > 0 && (
+        <ul className="mt-[6px] flex flex-col text-[11px] leading-[14px]" style={{ color: t.meta }}>
+          {data.meta.map((m) => (
+            <li key={m} className="truncate" title={m}>
+              {m}
+            </li>
+          ))}
+        </ul>
+      )}
       {ids.length > 0 && (
         <div className="absolute -top-2 right-[6px] flex gap-1" aria-hidden="true">
           {ids.map((id) => (

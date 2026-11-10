@@ -18,12 +18,14 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "fixtures": "node packages/fixtures/scripts/make-fixtures.mjs",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run typecheck && npm test && npm run build",
+    "e2e": "playwright test"
   },
   "devDependencies": {
-    "typescript": "^7.0.0",
-    "vitest": "^5.0.0",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.0.0",
     "exceljs": "^4.0.0",
-    "@types/node": "^26.0.0"
+    "typescript": "^7.0.0",
+    "vitest": "^5.0.0"
   }
 }

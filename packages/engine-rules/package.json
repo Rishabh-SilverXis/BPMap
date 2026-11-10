@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Health & controls rules engine (Architecture §11)",
+  "description": "Health & controls rules engine (Architecture \u00a711)",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@bpmap/model": "*"
+    "@bpmap/model": "*",
+    "@bpmap/engine-graph": "*"
   },
   "devDependencies": {
     "@bpmap/fixtures": "*",

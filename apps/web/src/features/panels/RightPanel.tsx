@@ -1,25 +1,31 @@
 /**
  * Right panel (Design System §8.1, §9.3). Tabs: Step (details + overlay edits, CUS-01), Health
- * (rules engine findings, HLT-01/02) and Import report (IMP-05). Scenario and Customise arrive in Phase 2.
+ * (rules engine findings, HLT-01/02), Scenario (SCN-01..03) and Import report (IMP-05). Customise
+ * lane names etc. arrives in Increment 2.2.
  */
-import { useId, type KeyboardEvent, type ReactNode } from 'react';
+import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
+import type { Finding } from '@bpmap/engine-rules';
 import { MousePointerClick, TriangleAlert, Info, OctagonAlert, CircleCheck, Bell } from 'lucide-react';
 import clsx from 'clsx';
 import { KIND_LABEL } from '@bpmap/model';
 import { stepTitle } from '@bpmap/scene';
 import type { Diagram } from '../../app/derive.ts';
 import { useStore, type PanelTab } from '../../store/store.ts';
+import { ScenarioPanel } from './ScenarioPanel.tsx';
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: 'step', label: 'Step' },
+  { id: 'scenario', label: 'Scenario' },
   { id: 'health', label: 'Health' },
-  { id: 'report', label: 'Import report' },
+  { id: 'report', label: 'Import' },
 ];
 
 export function RightPanel({ diagram }: { diagram: Diagram }) {
   const panel = useStore((s) => s.panel);
   const setPanel = useStore((s) => s.setPanel);
   const warnings = diagram.def.warnings.length;
+  // Badge counts open Critical + Warning findings only; Info findings are listed but don't shout (DEC-037).
+  const openFindings = diagram.findings.filter((f) => f.severity !== 'info' && !diagram.overlay.dismissedFindings[f.fingerprint]).length;
   const base = useId();
 
   const onKey = (e: KeyboardEvent) => {
@@ -45,13 +51,14 @@ export function RightPanel({ diagram }: { diagram: Diagram }) {
             className={clsx('-mb-px border-b-2 px-2 py-2.5 text-sm font-medium', panel === t.id ? 'border-accent text-text' : 'border-transparent text-text-secondary hover:text-text')}
           >
             {t.label}
-            {t.id === 'health' && diagram.findings.length > 0 && <span className="ml-1.5 rounded-full bg-[#FEF3C7] px-1.5 text-[11px] font-bold text-[#92400E]">{diagram.findings.length}</span>}
+            {t.id === 'scenario' && diagram.outcome.answeredCount > 0 && <span className="ml-1.5 rounded-full bg-[#E9F7F4] px-1.5 text-[11px] font-bold text-[#0B6E63]">{diagram.outcome.answeredCount}</span>}
+            {t.id === 'health' && openFindings > 0 && <span className="ml-1.5 rounded-full bg-[#FEF3C7] px-1.5 text-[11px] font-bold text-[#92400E]">{openFindings}</span>}
             {t.id === 'report' && warnings > 0 && <span className="ml-1.5 rounded-full bg-[#FEF3C7] px-1.5 text-[11px] font-bold text-[#92400E]">{warnings}</span>}
           </button>
         ))}
       </div>
       <div role="tabpanel" id={`${base}-${panel}-panel`} aria-labelledby={`${base}-${panel}`} className="flex-1 overflow-auto p-4">
-        {panel === 'step' ? <StepPanel diagram={diagram} /> : panel === 'health' ? <HealthPanel diagram={diagram} /> : <ReportPanel diagram={diagram} />}
+        {panel === 'step' ? <StepPanel diagram={diagram} /> : panel === 'scenario' ? <ScenarioPanel diagram={diagram} /> : panel === 'health' ? <HealthPanel diagram={diagram} /> : <ReportPanel diagram={diagram} />}
       </div>
     </aside>
   );
@@ -317,32 +324,101 @@ function DefinitionSettings({ diagram }: { diagram: Diagram }) {
   );
 }
 
-/** Health findings (Design System §9.7). Severity = coloured rule + icon + label, never colour alone. */
+/** Health findings (Design System §9.7, HLT-01/02). Severity = coloured rule + icon + label, never colour alone. */
 function HealthPanel({ diagram }: { diagram: Diagram }) {
-  const select = useStore((s) => s.select);
-  const f = diagram.findings;
-  if (!f.length)
-    return (
-      <p className="flex items-center gap-2 py-6 text-[13px] text-text-secondary">
-        <CircleCheck className="h-4 w-4 text-success" aria-hidden /> No issues found by the current checks.
-      </p>
-    );
+  const dismissed = diagram.overlay.dismissedFindings;
+  const active = diagram.findings.filter((f) => !dismissed[f.fingerprint]);
+  const gone = diagram.findings.filter((f) => dismissed[f.fingerprint]);
+  const restore = useStore((s) => s.restoreFinding);
+  const groups = new Map<string, Finding[]>();
+  for (const f of active) groups.set(f.ruleId, [...(groups.get(f.ruleId) ?? []), f]);
+
   return (
-    <ul className="flex flex-col gap-3 text-[13px]">
-      {f.map((x) => (
-        <li key={x.fingerprint} className={clsx('rounded-[var(--radius-md)] border border-border border-l-4 bg-surface p-3', x.severity === 'critical' ? 'border-l-danger' : x.severity === 'warning' ? 'border-l-warning' : 'border-l-info')}>
-          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-text-muted">
-            {x.severity === 'critical' ? <OctagonAlert className="h-3.5 w-3.5 text-danger" aria-hidden /> : <TriangleAlert className="h-3.5 w-3.5 text-warning" aria-hidden />}
-            {x.severity} · {x.ruleId}
-          </p>
-          <p className="mt-1 font-semibold">{x.title}</p>
-          <p className="mt-1 text-text-secondary">{x.message}</p>
-          {x.suggestedFix && <p className="mt-1 text-text-secondary">Suggested fix: {x.suggestedFix}</p>}
-          <button type="button" onClick={() => select(x.stepIds[0]!)} className="mt-2 text-xs font-semibold text-action hover:underline">
+    <div className="flex flex-col gap-3 text-[13px]">
+      {active.length === 0 && (
+        <p className="flex items-center gap-2 py-4 text-text-secondary">
+          <CircleCheck className="h-4 w-4 text-success" aria-hidden /> No open issues from the current checks.
+        </p>
+      )}
+      {[...groups.entries()].map(([ruleId, fs]) => (
+        <details key={ruleId} open={fs.length <= 3} className="rounded-[var(--radius-md)] border border-border">
+          <summary className="flex cursor-pointer items-center gap-2 px-3 py-2">
+            <SeverityIcon severity={fs[0]!.severity} />
+            <span className="font-semibold">{fs[0]!.title}</span>
+            <span className="ml-auto rounded-full bg-surface-sunken px-1.5 text-xs font-bold">{fs.length}</span>
+          </summary>
+          <ul className="flex flex-col gap-2 px-3 pb-3">
+            {fs.map((f) => (
+              <FindingCard key={f.fingerprint} f={f} />
+            ))}
+          </ul>
+        </details>
+      ))}
+      {gone.length > 0 && (
+        <details className="rounded-[var(--radius-md)] border border-dashed border-border">
+          <summary className="cursor-pointer px-3 py-2 text-text-secondary">Dismissed ({gone.length})</summary>
+          <ul className="flex flex-col gap-2 px-3 pb-3">
+            {gone.map((f) => (
+              <li key={f.fingerprint} className="text-xs text-text-secondary">
+                <span className="font-semibold">{f.ruleId}</span> · {f.message}
+                <span className="mt-0.5 block italic">Reason: {dismissed[f.fingerprint]!.reason}</span>
+                <button type="button" onClick={() => restore(f.fingerprint)} className="mt-1 font-semibold text-action hover:underline">
+                  Restore
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <p className="text-xs text-text-muted">Checks run on the whole definition, not the current scenario. Dismissals are kept when you re-import.</p>
+    </div>
+  );
+}
+
+function SeverityIcon({ severity }: { severity: Finding['severity'] }) {
+  if (severity === 'critical') return <OctagonAlert className="h-4 w-4 shrink-0 text-danger" aria-label="Critical" />;
+  if (severity === 'warning') return <TriangleAlert className="h-4 w-4 shrink-0 text-warning" aria-label="Warning" />;
+  return <Info className="h-4 w-4 shrink-0 text-info" aria-label="Info" />;
+}
+
+function FindingCard({ f }: { f: Finding }) {
+  const select = useStore((s) => s.select);
+  const dismiss = useStore((s) => s.dismissFinding);
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState('');
+  return (
+    <li className={clsx('rounded-[var(--radius-sm)] border-l-4 bg-surface-sunken p-2.5', f.severity === 'critical' ? 'border-l-danger' : f.severity === 'warning' ? 'border-l-warning' : 'border-l-info')}>
+      <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-text-muted">
+        {f.severity} · {f.ruleId}
+      </p>
+      <p className="mt-1">{f.message}</p>
+      {f.suggestedFix && <p className="mt-1 text-text-secondary">Suggested fix: {f.suggestedFix}</p>}
+      {asking ? (
+        <form
+          className="mt-2 flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            dismiss(f.fingerprint, reason);
+          }}
+        >
+          <input autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why is this OK?" aria-label="Reason for dismissing" className="h-7 min-w-0 flex-1 rounded-[var(--radius-sm)] border border-border-strong bg-surface px-2 text-xs" />
+          <button type="submit" className="rounded-[var(--radius-sm)] bg-action px-2 text-xs font-semibold text-on-action">
+            Dismiss
+          </button>
+          <button type="button" onClick={() => setAsking(false)} className="text-xs text-text-muted">
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <div className="mt-2 flex gap-3">
+          <button type="button" onClick={() => select(f.stepIds[0]!)} className="text-xs font-semibold text-action hover:underline">
             Show step
           </button>
-        </li>
-      ))}
-    </ul>
+          <button type="button" onClick={() => setAsking(true)} className="text-xs font-semibold text-text-secondary hover:underline">
+            Dismiss…
+          </button>
+        </div>
+      )}
+    </li>
   );
 }

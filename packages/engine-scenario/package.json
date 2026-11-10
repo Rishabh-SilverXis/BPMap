@@ -1,0 +1,17 @@
+{
+  "name": "@bpmap/engine-scenario",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Scenario simulation: condition answers → skipped steps, resolved conditions (SCN-01..03)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@bpmap/model": "*"
+  },
+  "devDependencies": {
+    "@bpmap/fixtures": "*",
+    "@bpmap/importer-xlsx": "*"
+  }
+}

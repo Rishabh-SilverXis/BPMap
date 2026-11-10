@@ -9,7 +9,7 @@
  */
 import { KIND_LABEL, type ProcessDefinition, type Step, type StepKind } from '@bpmap/model';
 import type { SemanticGraph } from '@bpmap/engine-graph';
-import type { LayoutResult, Point } from '@bpmap/engine-layout';
+import { executiveLayout, type LayoutResult, type Point } from '@bpmap/engine-layout';
 import { canvasType, nodeTokens, semantic, type Theme } from '@bpmap/design-tokens';
 import { textWidth, wrapText } from './text.ts';
 
@@ -23,7 +23,7 @@ export type SceneItem =
   | { t: 'text'; x: number; y: number; text: string; size: number; weight: number; fill: string; anchor?: 'start' | 'middle' | 'end'; mono?: boolean; letterSpacing?: number }
   | { t: 'group'; role: SceneRole; id?: string; children: SceneItem[] };
 
-export type SceneRole = 'lanes' | 'lane' | 'stage-headers' | 'bars' | 'edges' | 'decisions' | 'markers' | 'step' | 'header' | 'legend' | 'conditions';
+export type SceneRole = 'lanes' | 'lane' | 'stage-headers' | 'bars' | 'edges' | 'decisions' | 'markers' | 'step' | 'stage-card' | 'header' | 'legend' | 'conditions';
 
 export interface Scene {
   width: number;
@@ -76,6 +76,37 @@ const diamondPoints = (cx: number, cy: number, r: number): Point[] => [[cx, cy -
 export interface SceneDecor {
   labels?: Readonly<Record<string, string>>;
   notes?: Readonly<Record<string, string>>;
+  /** Audience view (VW-01..03). Configurator adds detail lines; Executive draws stage cards. */
+  view?: 'executive' | 'owner' | 'configurator';
+  /** Appended to the export header, e.g. the active scenario. */
+  subtitle?: string;
+}
+
+/** Node height per view: Configurator boxes carry up to 4 detail lines (DEC-035). */
+export const NODE_HEIGHT = { owner: 76, configurator: 140 } as const;
+
+/**
+ * Configurator detail lines for a step (DS §11): due, alternate, routing, restriction, extra
+ * groups, run-as, validations, notifications. Shared by the scene and the canvas node.
+ */
+export function stepMetaLines(step: Step, def: ProcessDefinition): string[] {
+  const lines: string[] = [];
+  if (step.dueDate) lines.push(`Due: ${step.dueDate}${step.dueOnEffectiveDate && !/effective/i.test(step.dueDate) ? ' (from effective date)' : ''}`);
+  if (step.alternate) lines.push(`Alternate: ${step.alternate}`);
+  if (step.routing) lines.push(`Routing: ${step.routing}`);
+  if (step.restriction) lines.push(`Restricted: ${step.restriction}`);
+  if (step.groups.length > 1) lines.push(`Also: ${step.groups.slice(1).join(', ')}`);
+  if (step.runAs) lines.push(`Run as: ${step.runAs}`);
+  if (step.validations.length) lines.push(`${step.validations.length} validation${step.validations.length === 1 ? '' : 's'}`);
+  const n = def.notifications.filter((x) => x.stepId === step.id && !x.disabled).length;
+  if (n) lines.push(`${n} notification${n === 1 ? '' : 's'}`);
+  if (step.doNotAdvance) lines.push('Does not auto-advance');
+  return lines;
+}
+
+/** At most `max` lines; the last becomes "+n more" when there are more. */
+export function clampMeta(lines: string[], max = 4): string[] {
+  return lines.length <= max ? lines : [...lines.slice(0, max - 1), `+${lines.length - max + 1} more`];
 }
 
 export function buildDiagramScene(def: ProcessDefinition, graph: SemanticGraph, L: LayoutResult, theme: Theme = 'light', decor: SceneDecor = {}): Scene {
@@ -149,10 +180,11 @@ export function buildDiagramScene(def: ProcessDefinition, graph: SemanticGraph, 
   });
 
   for (const n of L.nodes) {
-    const step = graph.steps[n.id]!.step;
+    const gs = graph.steps[n.id]!;
+    const step = gs.step;
     const style = nodeStyleOf(step.kind);
     const t = tk[style];
-    const conditional = step.conditionIds.length > 0;
+    const conditional = gs.conditional; // unresolved conditions only (DEC-034)
     const pad = 10;
     const children: SceneItem[] = [
       { t: 'rect', x: n.x, y: n.y, w: n.width, h: n.height, r: 6, fill: t.bg, stroke: conditional ? tk.conditionalBorder : t.border, strokeWidth: conditional ? 1.75 : 1.5, ...(conditional ? { dash: SKIP_DASH } : {}) },
@@ -162,7 +194,8 @@ export function buildDiagramScene(def: ProcessDefinition, graph: SemanticGraph, 
       ),
     ];
     // Condition badges on the top edge, right-aligned (max 3 + "+n").
-    const ids = step.conditionIds.length > 3 ? [...step.conditionIds.slice(0, 2), `+${step.conditionIds.length - 2}`] : step.conditionIds;
+    const open = gs.openConditionIds;
+    const ids = open.length > 3 ? [...open.slice(0, 2), `+${open.length - 2}`] : open;
     let bx = n.x + n.width - 6;
     for (const id of [...ids].reverse()) {
       const w = textWidth(id, canvasType.badge.size, 700) + 10;
@@ -170,6 +203,12 @@ export function buildDiagramScene(def: ProcessDefinition, graph: SemanticGraph, 
       children.push({ t: 'rect', x: bx, y: n.y - 8, w, h: 16, r: 8, fill: tk.conditionBadge.bg, stroke: tk.conditionalBorder, strokeWidth: 1 });
       children.push({ t: 'text', x: bx + w / 2, y: n.y + 3.5, text: id, size: canvasType.badge.size, weight: 700, fill: tk.conditionBadge.text, anchor: 'middle', mono: true });
       bx -= 4;
+    }
+    if (decor.view === 'configurator') {
+      clampMeta(stepMetaLines(step, def)).forEach((line, i) => {
+        const text = wrapText(line, n.width - 2 * pad, canvasType.meta.size, 400, 1)[0] ?? '';
+        children.push({ t: 'text', x: n.x + pad, y: n.y + 82 + i * canvasType.meta.line, text, size: canvasType.meta.size, weight: 400, fill: t.meta });
+      });
     }
     if (notes[n.id]) {
       children.push({ t: 'circle', cx: n.x + 2, cy: n.y + n.height, r: 8, fill: s.primary, stroke: s.surface, strokeWidth: 1.5 });
@@ -183,6 +222,47 @@ export function buildDiagramScene(def: ProcessDefinition, graph: SemanticGraph, 
   }
 
   return { width: L.width, height: L.height, background: s.surface, items };
+}
+
+/* ------------------------------------------------------------------ executive view (VW-01) */
+
+const EXEC = { cardWidth: 236, pad: 12, titleLine: 17, caption: 14, gap: 10 } as const;
+
+/** Stage cards: what happens, in which order, by whom; "only if" tags; parallel steps in one card (DEC-035). */
+export function buildExecutiveDiagram(def: ProcessDefinition, graph: SemanticGraph, theme: Theme = 'light', decor: SceneDecor = {}): Scene {
+  const tk = nodeTokens(theme);
+  const s = semantic[theme];
+  const labels = decor.labels ?? {};
+  const textW = EXEC.cardWidth - 2 * EXEC.pad - 14;
+  const titleLines = (id: string) => wrapText(stepTitle(graph.steps[id]!.step, labels[id]), textW, 13, 600, 2);
+  const EL = executiveLayout(graph, { cardWidth: EXEC.cardWidth, stepHeight: (id) => titleLines(id).length * EXEC.titleLine + EXEC.caption + EXEC.gap });
+  const laneLabel = new Map(graph.lanes.map((l) => [l.id, l.label]));
+  const items: SceneItem[] = [];
+
+  items.push({ t: 'group', role: 'edges', children: EL.edges.map((e): SceneItem => ({ t: 'path', points: e.points, stroke: tk.edge, width: 1.5, arrow: true })) });
+
+  for (const c of EL.cards) {
+    const st = graph.stages[c.stageIndex]!;
+    const allConditional = st.stepIds.every((id) => graph.steps[id]!.conditional);
+    const children: SceneItem[] = [
+      { t: 'rect', x: c.x, y: c.y, w: c.w, h: c.h, r: 10, fill: s.surface, stroke: allConditional ? tk.conditionalBorder : tk.action.border, strokeWidth: allConditional ? 1.75 : 1.25, ...(allConditional ? { dash: SKIP_DASH } : {}) },
+      { t: 'text', x: c.x + EXEC.pad, y: c.y + 19, text: `STAGE ${c.stageIndex + 1} · STEP ${st.order.toUpperCase()}${st.parallel ? ' · PARALLEL' : ''}`, size: 10, weight: 700, fill: s['text-muted'], letterSpacing: 0.6 },
+    ];
+    for (const row of c.steps) {
+      const gs = graph.steps[row.id]!;
+      const style = tk[nodeStyleOf(gs.step.kind)];
+      const y0 = c.y + row.y;
+      children.push({ t: 'circle', cx: c.x + EXEC.pad + 4, cy: y0 + 9, r: 4, fill: style.bg, stroke: style.border, strokeWidth: 1.25 });
+      const lines = titleLines(row.id);
+      lines.forEach((l, i) => children.push({ t: 'text', x: c.x + EXEC.pad + 14, y: y0 + 13 + i * EXEC.titleLine, text: l, size: 13, weight: 600, fill: s.text }));
+      const caption = [laneLabel.get(gs.laneId) ?? '', gs.conditional ? `only if ${conditionPhrase(gs.openConditionIds)}` : '', gs.step.complete ? 'process complete' : ''].filter(Boolean).join(' · ');
+      const capY = y0 + 13 + lines.length * EXEC.titleLine - 2;
+      children.push({ t: 'text', x: c.x + EXEC.pad + 14, y: capY, text: wrapText(caption, textW, 11, 400, 1)[0] ?? '', size: 11, weight: 400, fill: gs.conditional ? s['on-conditional-subtle'] : s['text-secondary'] });
+    }
+    // 'stage-card', not 'step': the canvas skips 'step' groups because React Flow draws those live.
+    items.push({ t: 'group', role: 'stage-card', id: `stage-${c.stageIndex}`, children });
+  }
+  return { width: EL.width, height: EL.height, background: s.surface, items };
 }
 
 /* ------------------------------------------------------------------ export wrapper */
@@ -200,6 +280,8 @@ function translate(items: SceneItem[], dx: number, dy: number): SceneItem[] {
   });
 }
 
+const VIEW_NAME = { executive: 'Executive', owner: 'Process owner', configurator: 'Configurator' } as const;
+
 export const EXCEPTIONS_NOTE =
   'Not drawn on every step: at an approval or action the person can send back or deny, and allowed roles can cancel, rescind or correct the process (set in the business process security policy).';
 
@@ -214,10 +296,12 @@ export function summaryLine(def: ProcessDefinition, graph: SemanticGraph): strin
 export const EXPORT_DIAGRAM_OFFSET = { x: 32, y: 92 } as const;
 
 export function buildExportScene(def: ProcessDefinition, graph: SemanticGraph, L: LayoutResult, theme: Theme = 'light', decor: SceneDecor = {}): Scene {
+  const executive = decor.view === 'executive';
+  const diagram = executive ? buildExecutiveDiagram(def, graph, theme, decor) : buildDiagramScene(def, graph, L, theme, decor);
   const s = semantic[theme];
   const tk = nodeTokens(theme);
   const M = EXPORT_DIAGRAM_OFFSET.x;
-  const width = Math.max(L.width, 960) + 2 * M;
+  const width = Math.max(diagram.width, 960) + 2 * M;
   const inner = width - 2 * M;
   const items: SceneItem[] = [];
 
@@ -227,18 +311,24 @@ export function buildExportScene(def: ProcessDefinition, graph: SemanticGraph, L
     role: 'header',
     children: [
       { t: 'text', x: M, y: M + 18, text: title, size: 22, weight: 700, fill: s.primary },
-      { t: 'text', x: M, y: M + 40, text: `Workday business process definition · ${summaryLine(def, graph)}`, size: 12, weight: 400, fill: s['text-muted'] },
+      { t: 'text', x: M, y: M + 40, text: [`${VIEW_NAME[decor.view ?? 'owner']} view`, summaryLine(def, graph), decor.subtitle].filter(Boolean).join(' · '), size: 12, weight: 400, fill: s['text-muted'] },
     ],
   });
 
   const diagramTop = EXPORT_DIAGRAM_OFFSET.y;
-  items.push(...translate(buildDiagramScene(def, graph, L, theme, decor).items, M, diagramTop));
+  items.push(...translate(diagram.items, M, diagramTop));
 
   // Legend (DS §10.6).
-  let y = diagramTop + L.height + 28;
+  let y = diagramTop + diagram.height + 28;
   const legend: SceneItem[] = [{ t: 'text', x: M, y, text: 'LEGEND', size: 10, weight: 800, fill: s['text-muted'], letterSpacing: 1 }];
   y += 14;
-  const entries: [SceneItem, string][] = [
+  const entries: [SceneItem, string][] = executive
+    ? [
+        [{ t: 'rect', x: 0, y: 0, w: 28, h: 16, r: 4, fill: s.surface, stroke: tk.action.border, strokeWidth: 1.25 }, 'Stage: steps in one card run at the same time'],
+        [{ t: 'rect', x: 0, y: 0, w: 28, h: 16, r: 4, fill: s.surface, stroke: tk.conditionalBorder, strokeWidth: 1.75, dash: SKIP_DASH }, 'Every step in the stage is conditional'],
+        [{ t: 'circle', cx: 14, cy: 8, r: 5, fill: tk.approval.bg, stroke: tk.approval.border, strokeWidth: 1.25 }, 'Approval (other dots: action, to do, system)'],
+      ]
+    : [
     [{ t: 'rect', x: 0, y: 0, w: 28, h: 16, r: 4, fill: tk.approval.bg, stroke: tk.approval.border, strokeWidth: 1.5 }, 'Approval / start'],
     [{ t: 'rect', x: 0, y: 0, w: 28, h: 16, r: 4, fill: tk.action.bg, stroke: tk.action.border, strokeWidth: 1.5 }, 'Action or review'],
     [{ t: 'rect', x: 0, y: 0, w: 28, h: 16, r: 4, fill: tk.todo.bg, stroke: tk.todo.border, strokeWidth: 1.5 }, 'To do'],
@@ -249,7 +339,7 @@ export function buildExportScene(def: ProcessDefinition, graph: SemanticGraph, L
     [{ t: 'poly', points: diamondPoints(14, 8, 9), fill: tk.conditionBadge.bg, stroke: tk.conditionalBorder, strokeWidth: 1.5 }, 'Decision: Yes runs the approval, No skips it'],
     [{ t: 'circle', cx: 14, cy: 8, r: 7, fill: s.surface, stroke: tk.completion, strokeWidth: 2.5 }, 'Start'],
     [{ t: 'circle', cx: 14, cy: 8, r: 7, fill: s.surface, stroke: s.primary, strokeWidth: 3.5 }, 'End of the flow'],
-  ];
+      ];
   const colW = Math.min(inner / 4, 290); // readable legend even on very wide diagrams (DEC-033)
   entries.forEach(([shape, label], i) => {
     const x = M + (i % 4) * colW;

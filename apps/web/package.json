@@ -13,6 +13,7 @@
     "@bpmap/engine-graph": "*",
     "@bpmap/engine-layout": "*",
     "@bpmap/engine-rules": "*",
+    "@bpmap/engine-scenario": "*",
     "@bpmap/importer-xlsx": "*",
     "@bpmap/model": "*",
     "@bpmap/scene": "*",

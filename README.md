@@ -4,7 +4,7 @@ See Workday business process definitions as a readable swimlane flow, privately 
 
 > Working product name. Independent product, not affiliated with Workday, Inc. Workday® is a trademark of Workday, Inc.
 
-**Status:** Increment 1 (Phase 0 + the Phase 1 core). Import a *View Definition* Excel export → correct stages, parallel steps, conditions and lanes → customise → export SVG / PNG / project file. Everything runs locally: nothing is uploaded.
+**Status:** Phase 2, Increment 2.1. Import a Workday *View Definition* Excel export → correct stages, parallel steps, conditions, lanes and decisions → **Executive / Process owner / Configurator** views → **scenario simulation** (answer conditions, see the real path) → **health checks** (HC-01..07, HC-16) → customise → export SVG / PNG / project file. Everything runs locally: nothing is uploaded, and an e2e test proves it.
 
 ## Run it
 
@@ -22,6 +22,7 @@ npm run dev          # http://localhost:5173
 | `npm run typecheck` | TypeScript 7 over the whole workspace |
 | `npm run build` | Production build with CSP (`apps/web/dist`) |
 | `npm run check` | typecheck + test + build |
+| `npm run e2e` | Playwright e2e on the production build, using your installed Chrome (incl. the network-privacy test) |
 | `npm run fixtures` | Regenerate the synthetic XLSX fixtures and the in-app sample |
 
 ## Layout
@@ -31,7 +32,9 @@ apps/web                 React 19 + Vite 8 app (shell, canvas, panels, import wo
 packages/model           canonical model: zod schemas, stable IDs, order → stage keys, step kinds
 packages/importer-xlsx   worker-safe XLSX reader + Workday normaliser (fflate + fast-xml-parser)
 packages/engine-graph    stages, lanes, transitions
-packages/engine-layout   deterministic grid placement + gutter edge routing
+packages/engine-layout   grid placement, gutter routing, decision diamonds, executive stage cards
+packages/engine-scenario scenario answers → skipped steps, resolved conditions, presets
+packages/engine-rules    health rules HC-01..07, HC-16
 packages/scene           one display list for canvas background and exports; SVG serialiser
 packages/design-tokens   colours/type tokens (TS) + Tailwind CSS mirror
 packages/fixtures        SYNTHETIC workbooks + golden snapshot (replace with anonymised real exports)

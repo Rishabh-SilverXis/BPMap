@@ -428,6 +428,8 @@ const runs = (step: Step, a: Record<ConditionId, Answer>) =>
   step.conditionIds.every(c => a[c] !== 'no');   // unset = "may run" (drawn dashed)
 ```
 
+Conditions answered **yes** are *resolved* for the case: they no longer make a step conditional (no dashed outline, badge or diamond). Implemented in `@bpmap/engine-scenario` (DEC-034).
+
 After pruning:
 - A stage with no remaining steps is removed.
 - A lane with no remaining steps is collapsed.

@@ -1,37 +1,52 @@
 /**
  * The derivation pipeline (Architecture §8) as React hooks:
- *   model + overlay → buildGraph → layout → buildExportScene;  model → runRules (Health)
+ *   model + overlay + scenario (evaluateScenario) → buildGraph → layout(view) → buildExportScene(view)
+ *   model → runRules (Health)
  * Pure functions, memoised on input identity. Increment 1 runs them on the main thread
  * (definitions are well under the 40-step worker threshold of §8; DEC-020).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { buildGraph, type SemanticGraph } from '@bpmap/engine-graph';
 import { layout, type LayoutResult } from '@bpmap/engine-layout';
-import { buildExportScene, type Scene } from '@bpmap/scene';
+import { NODE_HEIGHT, buildExportScene, type Scene } from '@bpmap/scene';
+import { emptyScenario, evaluateScenario, type ScenarioResult, type ScenarioState } from '@bpmap/engine-scenario';
 import { runRules, type Finding } from '@bpmap/engine-rules';
 import type { Theme } from '@bpmap/design-tokens';
 import type { ProcessDefinition } from '@bpmap/model';
 import { useStore } from '../store/store.ts';
-import { emptyOverlay, type Overlay } from '../store/overlay.ts';
+import { emptyOverlay, type Overlay, type View } from '../store/overlay.ts';
 
 export interface Diagram {
   def: ProcessDefinition;
   overlay: Overlay;
+  scenario: ScenarioState;
+  view: View;
+  /** Scenario outcome: skipped steps, resolved conditions, summary (SCN-01). */
+  outcome: ScenarioResult;
   graph: SemanticGraph;
   layout: LayoutResult;
   scene: Scene;
+  /** All findings for the definition (Health runs on the full definition, not the scenario). */
   findings: Finding[];
 }
 
-export function useDiagram(def: ProcessDefinition | null, overlay: Overlay | undefined, theme: Theme): Diagram | null {
+export function useDiagram(def: ProcessDefinition | null, overlay: Overlay | undefined, scenario: ScenarioState | undefined, view: View, theme: Theme): Diagram | null {
   return useMemo(() => {
     if (!def) return null;
     const ov = overlay ?? emptyOverlay();
-    const graph = buildGraph(def, { hiddenStepIds: new Set(ov.hidden), laneNames: ov.laneNames });
-    const L = layout(graph);
-    const scene = buildExportScene(def, graph, L, theme, { labels: ov.labels, notes: ov.notes });
-    return { def, overlay: ov, graph, layout: L, scene, findings: runRules(def) };
-  }, [def, overlay, theme]);
+    const sc = scenario ?? emptyScenario();
+    const outcome = evaluateScenario(def, sc.answers);
+    const graph = buildGraph(def, {
+      hiddenStepIds: new Set([...ov.hidden, ...outcome.skipped]),
+      laneNames: ov.laneNames,
+      resolvedConditionIds: outcome.resolved,
+      decisionConditionIds: new Set(sc.decisions),
+    });
+    const L = layout(graph, { nodeHeight: view === 'configurator' ? NODE_HEIGHT.configurator : NODE_HEIGHT.owner });
+    const subtitle = outcome.summary ? `${outcome.summary} (${outcome.skipped.size} step${outcome.skipped.size === 1 ? '' : 's'} skipped)` : undefined;
+    const scene = buildExportScene(def, graph, L, theme, { labels: ov.labels, notes: ov.notes, view, ...(subtitle ? { subtitle } : {}) });
+    return { def, overlay: ov, scenario: sc, view, outcome, graph, layout: L, scene, findings: runRules(def) };
+  }, [def, overlay, scenario, view, theme]);
 }
 
 /** Resolved theme from the user's preference + OS setting (Design System §15.1). */

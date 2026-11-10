@@ -3,7 +3,9 @@
   "include": [
     "packages/*/src",
     "apps/web/src",
+    "apps/web/e2e",
     "apps/web/vite.config.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "playwright.config.ts"
   ]
 }

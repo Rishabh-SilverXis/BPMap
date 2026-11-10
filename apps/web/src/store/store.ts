@@ -1,14 +1,16 @@
 /**
  * Application store (Architecture §14.1). Zustand + zundo.
  *
- * Only `overlays` is undoable (CUS-04): imports are not undone, you remove a definition instead.
+ * `overlays` and `scenarios` are undoable (CUS-04, Architecture §14.1): imports are not undone,
+ * you remove a definition instead.
  * Keystrokes in overlay fields are coalesced into one undo step (500 ms, DEC-019).
  */
 import { create } from 'zustand';
 import { temporal } from 'zundo';
 import type { ProcessDefinition } from '@bpmap/model';
 import type { ColumnMap, ImportOutcome } from '@bpmap/importer-xlsx';
-import { emptyOverlay, type Overlay } from './overlay.ts';
+import { emptyOverlay, type Overlay, type View } from './overlay.ts';
+import { emptyScenario, pruneScenario, type Answer, type ScenarioState } from '@bpmap/engine-scenario';
 import { importFile } from '../workers/importClient.ts';
 
 export interface ImportReport {
@@ -27,12 +29,14 @@ export type ImportState =
   | { status: 'error'; fileName?: string; message: string };
 
 export type ThemePref = 'system' | 'light' | 'dark';
-export type PanelTab = 'step' | 'health' | 'report';
+export type PanelTab = 'step' | 'scenario' | 'health' | 'report';
 
 export interface ProjectState {
   definitions: ProcessDefinition[];
   reports: Record<string, ImportReport>;
   overlays: Record<string, Overlay>;
+  scenarios: Record<string, ScenarioState>;
+  views: Record<string, View>;
   activeId: string | null;
   selectedStepId: string | null;
   panel: PanelTab;
@@ -53,7 +57,16 @@ export interface ProjectState {
   setNote(stepId: string, note: string): void;
   setHidden(stepId: string, hidden: boolean): void;
   setLaneName(laneId: string, name: string): void;
-  replaceProject(p: { definitions: ProcessDefinition[]; overlays: Record<string, Overlay>; reports?: Record<string, ImportReport> }): void;
+  dismissFinding(fingerprint: string, reason: string): void;
+  restoreFinding(fingerprint: string): void;
+  setView(view: View): void;
+  setAnswer(conditionId: string, answer: Answer): void;
+  toggleDecision(conditionId: string): void;
+  resetScenario(): void;
+  savePreset(name: string): void;
+  applyPreset(id: string): void;
+  deletePreset(id: string): void;
+  replaceProject(p: { definitions: ProcessDefinition[]; overlays: Record<string, Overlay>; scenarios?: Record<string, ScenarioState>; views?: Record<string, View>; reports?: Record<string, ImportReport> }): void;
 }
 
 const readThemePref = (): ThemePref => {
@@ -95,6 +108,13 @@ function undoBoundary(key: string) {
 export const useStore = create<ProjectState>()(
   temporal(
     (set, get) => {
+      const withScenario = (key: string, f: (s: ScenarioState) => ScenarioState) => {
+        const def = get().activeId;
+        if (!def) return;
+        undoBoundary(`${def}|scenario|${key}`);
+        set({ scenarios: { ...get().scenarios, [def]: f(get().scenarios[def] ?? emptyScenario()) } });
+      };
+
       const withOverlay = (key: string, f: (o: Overlay) => Overlay) => {
         const def = get().activeId;
         if (!def) return;
@@ -127,6 +147,7 @@ export const useStore = create<ProjectState>()(
           definitions: exists ? s.definitions.map((d) => (d.id === def.id ? def : d)) : [...s.definitions, def],
           reports: { ...s.reports, [def.id]: { fileName: file.name, stats: outcome.stats, sheets: outcome.sheets, mappingSource: outcome.mappingUsed.source } },
           overlays: s.overlays[def.id] ? s.overlays : { ...s.overlays, [def.id]: emptyOverlay() },
+          scenarios: { ...s.scenarios, [def.id]: pruneScenario(def, s.scenarios[def.id] ?? emptyScenario()) },
           activeId: def.id,
           selectedStepId: null,
           panel: def.warnings.length ? 'report' : s.panel,
@@ -141,6 +162,8 @@ export const useStore = create<ProjectState>()(
         definitions: [],
         reports: {},
         overlays: {},
+        scenarios: {},
+        views: {},
         activeId: null,
         selectedStepId: null,
         panel: 'step',
@@ -169,7 +192,9 @@ export const useStore = create<ProjectState>()(
           const definitions = s.definitions.filter((d) => d.id !== id);
           const { [id]: _o, ...overlays } = s.overlays;
           const { [id]: _r, ...reports } = s.reports;
-          set({ definitions, overlays, reports, activeId: s.activeId === id ? (definitions[0]?.id ?? null) : s.activeId, selectedStepId: null });
+          const { [id]: _s, ...scenarios } = s.scenarios;
+          const { [id]: _v, ...views } = s.views;
+          set({ definitions, overlays, reports, scenarios, views, activeId: s.activeId === id ? (definitions[0]?.id ?? null) : s.activeId, selectedStepId: null });
         },
         select: (stepId) => set({ selectedStepId: stepId, ...(stepId ? { panel: 'step' as const } : {}) }),
         setPanel: (panel) => set({ panel }),
@@ -204,13 +229,42 @@ export const useStore = create<ProjectState>()(
             else delete laneNames[laneId];
             return { ...o, laneNames };
           }),
+        dismissFinding: (fingerprint, reason) =>
+          withOverlay(`dismiss|${fingerprint}`, (o) => ({ ...o, dismissedFindings: { ...o.dismissedFindings, [fingerprint]: { reason: reason.trim() || 'No reason given', at: new Date().toISOString() } } })),
+        restoreFinding: (fingerprint) =>
+          withOverlay(`restore|${fingerprint}`, (o) => {
+            const { [fingerprint]: _d, ...rest } = o.dismissedFindings;
+            return { ...o, dismissedFindings: rest };
+          }),
+        setView(view) {
+          const def = get().activeId;
+          if (def) set({ views: { ...get().views, [def]: view }, ...(view === 'executive' ? { selectedStepId: null } : {}) });
+        },
+        setAnswer: (conditionId, answer) =>
+          withScenario(`answer|${conditionId}`, (sc) => {
+            const answers = { ...sc.answers };
+            if (answer === 'unset') delete answers[conditionId];
+            else answers[conditionId] = answer;
+            return { ...sc, answers };
+          }),
+        toggleDecision: (conditionId) =>
+          withScenario(`decision|${conditionId}|${Date.now()}`, (sc) => ({ ...sc, decisions: sc.decisions.includes(conditionId) ? sc.decisions.filter((d) => d !== conditionId) : [...sc.decisions, conditionId] })),
+        resetScenario: () => withScenario(`reset|${Date.now()}`, (sc) => ({ ...sc, answers: {} })),
+        savePreset: (name) =>
+          withScenario(`preset|${Date.now()}`, (sc) => ({ ...sc, presets: [...sc.presets, { id: `p${Date.now().toString(36)}`, name: name.trim() || `Scenario ${sc.presets.length + 1}`, answers: { ...sc.answers } }] })),
+        applyPreset: (id) =>
+          withScenario(`apply|${Date.now()}`, (sc) => {
+            const p = sc.presets.find((x) => x.id === id);
+            return p ? { ...sc, answers: { ...p.answers } } : sc;
+          }),
+        deletePreset: (id) => withScenario(`delpreset|${Date.now()}`, (sc) => ({ ...sc, presets: sc.presets.filter((x) => x.id !== id) })),
         replaceProject: (p) =>
-          untracked(() => set({ definitions: p.definitions, overlays: p.overlays, reports: p.reports ?? {}, activeId: p.definitions[0]?.id ?? null, selectedStepId: null })),
+          untracked(() => set({ definitions: p.definitions, overlays: p.overlays, scenarios: p.scenarios ?? {}, views: p.views ?? {}, reports: p.reports ?? {}, activeId: p.definitions[0]?.id ?? null, selectedStepId: null })),
       };
     },
     {
-      partialize: (s) => ({ overlays: s.overlays }),
-      equality: (a, b) => a.overlays === b.overlays,
+      partialize: (s) => ({ overlays: s.overlays, scenarios: s.scenarios }),
+      equality: (a, b) => a.overlays === b.overlays && a.scenarios === b.scenarios,
       limit: 100,
       handleSet: (handleSet) => coalesce(handleSet, 500),
     },
@@ -230,3 +284,5 @@ export function untracked(fn: () => void) {
 
 export const useActiveDefinition = () => useStore((s) => s.definitions.find((d) => d.id === s.activeId) ?? null);
 export const useActiveOverlay = () => useStore((s) => (s.activeId ? s.overlays[s.activeId] : undefined));
+export const useActiveScenario = () => useStore((s) => (s.activeId ? s.scenarios[s.activeId] : undefined));
+export const useActiveView = (): View => useStore((s) => (s.activeId ? (s.views[s.activeId] ?? 'owner') : 'owner'));

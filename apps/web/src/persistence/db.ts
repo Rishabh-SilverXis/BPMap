@@ -5,7 +5,8 @@
 import Dexie, { type Table } from 'dexie';
 import { parseDefinition, withFreshStageKeys, type ProcessDefinition } from '@bpmap/model';
 import { untracked, useStore, type ImportReport } from '../store/store.ts';
-import { isOverlay, type Overlay } from '../store/overlay.ts';
+import { isView, normaliseOverlay, type Overlay, type View } from '../store/overlay.ts';
+import { isScenarioState, type ScenarioState } from '@bpmap/engine-scenario';
 import type { ColumnMap } from '@bpmap/importer-xlsx';
 
 interface KV {
@@ -31,6 +32,8 @@ try {
 interface SavedProject {
   definitions: unknown[];
   overlays: Record<string, unknown>;
+  scenarios?: Record<string, unknown>;
+  views?: Record<string, unknown>;
   reports: Record<string, ImportReport>;
   activeId: string | null;
 }
@@ -49,10 +52,19 @@ export async function hydrateFromStorage(): Promise<void> {
       if (r.ok) definitions.push(withFreshStageKeys(r.value)); // invalid entries are dropped, never loaded unchecked
     }
     const overlays: Record<string, Overlay> = {};
-    for (const [k, v] of Object.entries(saved?.overlays ?? {})) if (isOverlay(v)) overlays[k] = v;
+    for (const [k, v] of Object.entries(saved?.overlays ?? {})) {
+      const o = normaliseOverlay(v);
+      if (o) overlays[k] = o;
+    }
+    const scenarios: Record<string, ScenarioState> = {};
+    for (const [k, v] of Object.entries(saved?.scenarios ?? {})) if (isScenarioState(v)) scenarios[k] = v;
+    const views: Record<string, View> = {};
+    for (const [k, v] of Object.entries(saved?.views ?? {})) if (isView(v)) views[k] = v;
     untracked(() => useStore.setState({
       definitions,
       overlays,
+      scenarios,
+      views,
       reports: saved?.reports ?? {},
       activeId: definitions.some((d) => d.id === saved?.activeId) ? saved!.activeId : (definitions[0]?.id ?? null),
       mappingProfiles: (profiles?.value as Record<string, ColumnMap>) ?? {},
@@ -68,14 +80,14 @@ export function startAutosave(): void {
   if (!db) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
   useStore.subscribe((s, prev) => {
-    if (s.definitions === prev.definitions && s.overlays === prev.overlays && s.activeId === prev.activeId && s.mappingProfiles === prev.mappingProfiles) return;
+    if (s.definitions === prev.definitions && s.overlays === prev.overlays && s.scenarios === prev.scenarios && s.views === prev.views && s.activeId === prev.activeId && s.mappingProfiles === prev.mappingProfiles) return;
     clearTimeout(timer);
     if (s.saveState !== 'saving') useStore.setState({ saveState: 'saving' });
     timer = setTimeout(async () => {
       const st = useStore.getState();
       try {
         await db!.kv.bulkPut([
-          { key: 'project', value: { definitions: st.definitions, overlays: st.overlays, reports: st.reports, activeId: st.activeId } satisfies SavedProject },
+          { key: 'project', value: { definitions: st.definitions, overlays: st.overlays, scenarios: st.scenarios, views: st.views, reports: st.reports, activeId: st.activeId } satisfies SavedProject },
           { key: 'mappingProfiles', value: st.mappingProfiles },
         ]);
         useStore.setState({ saveState: 'saved' });

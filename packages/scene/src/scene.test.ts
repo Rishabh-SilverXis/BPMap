@@ -61,3 +61,13 @@ describe('decision labels (DEC-032)', () => {
     expect(conditionPhrase(['C1', 'C2', 'C3', 'C4'])).toBe('4 conditions');
   });
 });
+
+describe('executive scene (VW-01)', () => {
+  it('draws one stage card per stage, not as interactive step groups', async () => {
+    const { buildExportScene: build } = await import('./index.ts');
+    const ex = build(r.definition, g, L, 'light', { view: 'executive' });
+    const roles = flat(ex.items).filter((i) => i.t === 'group').map((i) => (i as { role: string }).role);
+    expect(roles.filter((x) => x === 'stage-card')).toHaveLength(g.stages.length);
+    expect(roles).not.toContain('step');
+  });
+});

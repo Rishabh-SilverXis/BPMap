@@ -9,7 +9,6 @@
  * on approvals by default") with "Yes" into the step and a "No, skip" path that runs under the
  * step and rejoins after it; start and end markers around the flow.
  */
-import { APPROVAL_KINDS } from '@bpmap/model';
 import type { SemanticGraph } from '@bpmap/engine-graph';
 
 export interface LayoutOptions {
@@ -75,10 +74,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 
 export function layout(graph: SemanticGraph, options: Partial<LayoutOptions> = {}): LayoutResult {
   const o = { ...DEFAULT_LAYOUT, ...options };
-  const hasDiamond = (id: string) => {
-    const gs = graph.steps[id]!;
-    return gs.conditional && APPROVAL_KINDS.has(gs.step.kind);
-  };
+  const hasDiamond = (id: string) => graph.steps[id]!.decision;
 
   // 1. Stack depth per lane = max steps that lane has in any one stage.
   const depth = new Map<string, number>(graph.lanes.map((l) => [l.id, 1]));
@@ -149,7 +145,7 @@ export function layout(graph: SemanticGraph, options: Partial<LayoutOptions> = {
       entryX.set(n.id, n.x);
       continue;
     }
-    const d = { stepId: n.id, cx: n.x - o.diamondSpace / 2, cy: cy(n), r: o.diamondR, conditionIds: graph.steps[n.id]!.step.conditionIds };
+    const d = { stepId: n.id, cx: n.x - o.diamondSpace / 2, cy: cy(n), r: o.diamondR, conditionIds: graph.steps[n.id]!.openConditionIds };
     diamonds.push(d);
     entryX.set(n.id, d.cx - d.r);
     edges.push({ id: `yes-${n.id}`, points: [[d.cx + d.r, d.cy], [n.x, d.cy]], style: 'yes', arrow: true, label: 'Yes' });
@@ -235,3 +231,5 @@ export function layout(graph: SemanticGraph, options: Partial<LayoutOptions> = {
     edges,
   };
 }
+
+export { executiveLayout, type ExecCard, type ExecutiveLayout, type ExecutiveOptions } from './executive.ts';

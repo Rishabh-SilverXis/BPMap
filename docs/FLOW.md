@@ -8,9 +8,9 @@ Legend: `→` calls / passes data to · `⇢` async (worker message, promise, ti
 
 ## Current work
 
-> **Increment 1.1 ✅ complete**: fixes from the first real Workday export (DEC-026 to DEC-033). Built, tested (108 tests) and checked in the browser against the real file (kept in the git-ignored `.local/`).
+> **Phase 2 · Increment 2.1 ✅ complete** (DEC-034..038): views, scenarios, health rules HC-01..07 with dismissals, Playwright e2e (including network privacy) and CI. 119 unit + 5 e2e tests. Checked in the browser against the real export.
 >
-> ⏭ **Next (Increment 2):** Playwright e2e with the automated network-privacy test, a screen-reader step list, CI and import-boundary lint, then Phase 2 (three views, scenarios, PDF/PPTX export, more health rules).
+> ⏭ **Increment 2.2:** PDF / PPTX / draw.io exports (EXP-02..04), packs (PCK-01/03), re-import reconciliation (IMP-06), focus role (VIS-08), screen-reader step list (NFR-A11Y), and moving stored-data validation off the initial bundle (177 of 180 KB).
 >
 > No path is being modified at the moment.
 
@@ -98,51 +98,43 @@ importWorkbook(bytes, opts)                               packages/importer-xlsx
 
 ## 3. Model → screen (derivation) ✅
 
-Runs on every change of the active definition, its overlay, or the theme. Stored definitions are passed through `withFreshStageKeys` on load (DEC-026 migration).
+Runs on every change of the active definition, its overlay, its scenario, its view, or the theme. Stored definitions pass through `withFreshStageKeys` on load (DEC-026).
 
 ```
 <Workspace theme onToast>                                  app/Workspace.tsx (lazy)
- ├ useActiveDefinition(), useActiveOverlay()               store/store.ts selectors
- ├ useDiagram(def, overlay, theme)                         app/derive.ts  — useMemo, pure
- │    ├ buildGraph(def, { hiddenStepIds, laneNames })      packages/engine-graph
- │    │     ├ visible steps sorted by (stageKey, sourceRow)
- │    │     ├ lanes by first appearance; service/integration → system lanes last; renames applied
- │    │     ├ stages: one per stageKey; parallel = > 1 step; label "Step k · 6 in parallel"
- │    │     └ transitions: consecutive stages (i → i+1)
- │    ├ layout(graph)                                      packages/engine-layout
- │    │     ├ lane height = stack depth × node + padding
- │    │     ├ stage x/width (wider when parallel; +96 px when it holds a conditional approval)
- │    │     ├ nodes right-aligned in the column, stacked within a cell
- │    │     ├ diamonds before conditional approvals: "yes-" edge in, "skip-" edge under & after (DEC-032)
- │    │     ├ split/join bars + stubs (stubs enter the diamond when there is one)
- │    │     ├ transitions routed in the gutter between columns (DEC-013), entering diamonds
- │    │     └ start marker → first stage; last stage → end marker
- │    ├ runRules(def)                                      packages/engine-rules  (HC-16 → Health tab)
- │    └ buildExportScene(def, graph, L, theme, { labels, notes })   packages/scene
- │          ├ header (title + summaryLine)
- │          ├ translate(buildDiagramScene(...), EXPORT_DIAGRAM_OFFSET)
- │          │     lanes · stage headers · edges (Yes / "No, skip" pill labels) · decisions
- │          │     ("C5 and C6?") · markers · bars · step groups (kind tag, wrapText title,
- │          │     C-badges, N badge, completion ✓; dashed amber if conditional)
- │          ├ legend (≤ 290 px columns, DEC-033) · condition list (≤ 600 px columns) · footer
- │          └ colours from nodeTokens(theme)/semantic[theme]   packages/design-tokens
- ├ <DefinitionTabs/> · <Toolbar diagram/> · <StatusBar diagram/>   (summaryLine, warnings, save state)
+ ├ useActiveDefinition(), useActiveOverlay(), useActiveScenario(), useActiveView()   store selectors
+ ├ useDiagram(def, overlay, scenario, view, theme)         app/derive.ts  — useMemo, pure
+ │    ├ evaluateScenario(def, answers)                     packages/engine-scenario
+ │    │     → skipped (steps with a "no"), resolved (conditions answered "yes"), summary
+ │    ├ buildGraph(def, { hiddenStepIds: overlay.hidden ∪ skipped, laneNames,
+ │    │                   resolvedConditionIds, decisionConditionIds })      packages/engine-graph
+ │    │     ├ visible steps sorted by (stageKey, sourceRow); lanes by first appearance; system lanes last
+ │    │     ├ GraphStep: conditional (open conditions), openConditionIds, decision (approval | toggled)
+ │    │     └ stages (parallel when > 1 step) + transitions i → i+1
+ │    ├ layout(graph, { nodeHeight: 76 | 140 (configurator) })   packages/engine-layout
+ │    │     ├ lanes, stages (+96 px when a step has a decision), nodes right-aligned, stacked
+ │    │     ├ diamonds: "yes-" edge in, "skip-" edge under & after (DEC-032)
+ │    │     ├ split/join bars; gutter-routed transitions (DEC-013); start / end markers
+ │    ├ buildExportScene(def, graph, L, theme, { labels, notes, view, subtitle: scenario })   packages/scene
+ │    │     ├ view === 'executive' → buildExecutiveDiagram → executiveLayout (stage cards, DEC-035)
+ │    │     │  else buildDiagramScene (lanes · headers · edges · decisions · markers · bars · steps;
+ │    │     │       configurator adds clampMeta(stepMetaLines(step)) lines)
+ │    │     └ header (view · summary · scenario) · legend (per view) · condition list · footer
+ │    └ runRules(def)                                      packages/engine-rules (full definition, no scenario)
+ │          └ buildGraph(def) → HC-01..07, HC-16 → findings sorted by severity
+ ├ <DefinitionTabs/> · <Toolbar/> (view radiogroup → store.setView, undo/redo, export) · <StatusBar/> (scenario summary)
  ├ <DiagramCanvas diagram theme/>                          features/canvas/DiagramCanvas.tsx
- │    ├ nodes = layout.nodes → { position: n + EXPORT_DIAGRAM_OFFSET, width, height, selected, ariaLabel,
- │    │                           data: { step, label, note, tokens, surface } }
- │    ├ <ReactFlow onInit → fitScene()>   fitBounds(scene bounds), not node bounds (DEC-024)
- │    │    ├ <ViewportPortal><SceneSvg scene skip={['step']}/></ViewportPortal>   background = export scene
- │    │    ├ nodeTypes.step → <StepNode/>   features/canvas/StepNode.tsx  (same rules as scene step group)
- │    │    └ <Controls> (custom Fit button) · <MiniMap>
- │    └ selection: onNodesChange('select') / onPaneClick → store.select(id | null)
+ │    ├ nodes: [] in Executive; else layout.nodes + EXPORT_DIAGRAM_OFFSET, data { step, openConditionIds, meta? }
+ │    ├ <ReactFlow key={def|view} onInit → fitScene()>; <ViewportPortal><SceneSvg skip={['step']}/>
+ │    └ selection: onNodesChange('select') / onPaneClick → store.select
  └ <RightPanel diagram/>                                   features/panels/RightPanel.tsx
-      ├ tab "Step"   → StepPanel: details (restriction, alternate, routing, run-as, validations,
-      │               notifications for this step), "Runs only if" conditions, Customise fields (§4)
-      ├ tab "Health" → HealthPanel: diagram.findings → "Show step" → store.select(stepId)
-      └ tab "Import report" → ReportPanel: stats, sheets, definition settings, custom notifications, warnings
+      ├ Step     → details, validations, notifications, conditions, Customise (§4)
+      ├ Scenario → ScenarioPanel: setAnswer · toggleDecision · reset · save/apply/delete preset (§4)
+      ├ Health   → findings grouped by rule; badge = open critical + warning (DEC-037); Dismiss… / Restore (§4)
+      └ Import   → stats, sheets, definition settings, custom notifications, warnings
 ```
 
-## 4. Customise + undo ✅
+## 4. Customise, scenario, dismissals + undo ✅
 
 ```
 StepPanel input/textarea/checkbox onChange
@@ -153,7 +145,11 @@ StepPanel input/textarea/checkbox onChange
           ⇢ zundo temporal: handleSet wrapped by coalesce(…, 500 ms) → one pastStates entry per burst/field
  → useActiveOverlay() changes → useDiagram recomputes graph/layout/scene (§3)
  → autosave (§5)
-Toolbar Undo/Redo → useStore.temporal.getState().undo()/redo()   (only `overlays` is tracked)
+ScenarioPanel → store.setAnswer | toggleDecision | resetScenario | savePreset | applyPreset | deletePreset
+ → withScenario(key, f) → undoBoundary(`${defId}|scenario|${key}`) → set({ scenarios: {...} })
+HealthPanel FindingCard → store.dismissFinding(fp, reason) | restoreFinding(fp) → withOverlay(...) (overlay.dismissedFindings)
+Toolbar view radiogroup → store.setView(view) → views[defId]   (persisted, not undoable)
+Toolbar Undo/Redo → useStore.temporal.getState().undo()/redo()   (`overlays` + `scenarios` are tracked)
 ```
 
 ## 5. Autosave ✅
@@ -177,6 +173,19 @@ Toolbar → run(fn, okText) → toast                          app/Workspace.tsx
  ├ Export ▸ Project file → projectBlob(definitions, overlays) → .bpmap.json
  └ Open project          → readProjectFile(file): size ≤ 25 MB → JSON.parse → format/version check
                             → parseProject (zod) → isOverlay → store.replaceProject (untracked)
+```
+
+---
+
+## 7. Tests & CI ✅
+
+```
+npm test → vitest (packages/*/src/**/*.test.ts): model · importer (golden files) · graph · layout · scene · scenario · rules
+npm run e2e → playwright.config.ts → webServer: npm run build && npm run preview (CSP active, :4173)
+   └ apps/web/e2e/*.spec.ts with channel 'chrome' (system Chrome)
+        privacy.spec.ts: page.on('request') → assert same-origin, no bodies, no CSP violations (NFR-PRIV-01)
+        flows.spec.ts:   order + diamonds · scenario skip/reset · views · dismiss → reload → restore
+.github/workflows/ci.yml → npm ci → typecheck → test → build + secret scan of dist → e2e (traces on failure)
 ```
 
 ---

@@ -2,10 +2,11 @@
  * Rules engine (Architecture §11). A registry of pure rules over a definition; each produces
  * findings with a stable fingerprint so dismissals can survive re-import.
  *
- * Increment 1.1 ships the first rule, HC-16 (always-false condition), found in a real export
- * where steps s and s1 carry "1=0?" and therefore can never run (DEC-031).
+ * Rules: HC-01..HC-07 (PRD §13, Increment 2.1, DEC-036) and HC-16 (always-false condition,
+ * DEC-031). Rules that need an export column skip themselves when the column is empty.
  */
-import type { Condition, ProcessDefinition, Step } from '@bpmap/model';
+import { APPROVAL_KINDS, SYSTEM_KINDS, type Condition, type ProcessDefinition, type Step } from '@bpmap/model';
+import { buildGraph, type SemanticGraph } from '@bpmap/engine-graph';
 
 export type Severity = 'critical' | 'warning' | 'info';
 
@@ -19,11 +20,17 @@ export interface Finding {
   fingerprint: string;
 }
 
+export interface RuleContext {
+  def: ProcessDefinition;
+  graph: SemanticGraph; // full definition (no scenario, no hidden steps)
+  settings: { maxSerialApprovals: number; maxTasksPerStage: number };
+}
+
 export interface Rule {
   id: string;
   title: string;
   severity: Severity;
-  evaluate(def: ProcessDefinition): Finding[];
+  evaluate(ctx: RuleContext): Finding[];
 }
 
 const fp = (...parts: string[]) => parts.join('|');
@@ -42,7 +49,7 @@ export const HC16_ALWAYS_FALSE: Rule = {
   id: 'HC-16',
   title: 'Step can never run',
   severity: 'warning',
-  evaluate(def) {
+  evaluate({ def }) {
     const falseConds = new Map<string, Condition>(def.conditions.filter((c) => isAlwaysFalse(c.text)).map((c) => [c.id, c]));
     if (!falseConds.size) return [];
     return def.steps.flatMap((s) => {
@@ -64,10 +71,156 @@ export const HC16_ALWAYS_FALSE: Rule = {
   },
 };
 
-export const RULES: readonly Rule[] = [HC16_ALWAYS_FALSE];
+/* -------------------------------------------------------------- HC-01..HC-07 (PRD §13, DEC-036) */
+
+const isPersonStep = (s: Step) => !SYSTEM_KINDS.has(s.kind) && s.kind !== 'initiation';
+const isApproval = (s: Step) => APPROVAL_KINDS.has(s.kind);
+const where = (s: Step) => `step ${s.order} (${s.groups[0] ?? 'no group'})`;
+/** A rule that needs a column skips itself when the export has no value for it anywhere. */
+const hasData = (def: ProcessDefinition, f: (s: Step) => unknown) => def.steps.some((s) => !!f(s));
+
+export const HC01_SELF_APPROVAL: Rule = {
+  id: 'HC-01',
+  title: 'Approval not restricted from the initiator',
+  severity: 'critical',
+  evaluate({ def }) {
+    if (!hasData(def, (s) => s.restriction)) return [];
+    return def.steps
+      .filter((s) => isApproval(s) && !/\binitiator\b/i.test(s.restriction ?? ''))
+      .map((s) => ({
+        ruleId: 'HC-01', severity: 'critical' as const, title: this.title, stepIds: [s.id], fingerprint: fp('HC-01', s.id),
+        message: `The approval at ${where(s)} is not restricted from the initiator${s.restriction ? ` (restricted: ${s.restriction})` : ''}, so the person who started the process could approve it.`,
+        suggestedFix: 'Add "Initiator" to the step\'s restrictions so nobody approves their own request.',
+      }));
+  },
+};
+
+export const HC02_NO_ALTERNATE: Rule = {
+  id: 'HC-02',
+  title: 'Required step has no alternate',
+  severity: 'warning',
+  evaluate({ def }) {
+    if (!hasData(def, (s) => s.alternate)) return [];
+    return def.steps
+      .filter((s) => isPersonStep(s) && !s.optional && !s.alternate && !/employee as self|initiator/i.test(s.groups[0] ?? ''))
+      .map((s) => ({
+        ruleId: 'HC-02', severity: 'warning' as const, title: this.title, stepIds: [s.id], fingerprint: fp('HC-02', s.id),
+        message: `${where(s)} must be done, but no alternate group is set. If nobody in ${s.groups[0] ?? 'the group'} is available, the process waits.`,
+        suggestedFix: 'Set an alternate group (for example the manager relative to the excluded person).',
+      }));
+  },
+};
+
+export const HC03_NO_DUE_DATE: Rule = {
+  id: 'HC-03',
+  title: 'Approval or action without a due date',
+  severity: 'info',
+  evaluate({ def }) {
+    if (!hasData(def, (s) => s.dueDate)) return [];
+    return def.steps
+      .filter((s) => (isApproval(s) || s.kind === 'action') && !s.dueDate)
+      .map((s) => ({
+        ruleId: 'HC-03', severity: 'info' as const, title: this.title, stepIds: [s.id], fingerprint: fp('HC-03', s.id),
+        message: `${where(s)} has no due date, so it never shows as overdue.`,
+        suggestedFix: 'Add a due date if the step has a service level.',
+      }));
+  },
+};
+
+export const HC04_SERIAL_SAME_GROUP: Rule = {
+  id: 'HC-04',
+  title: 'Same group acts in consecutive stages',
+  severity: 'info',
+  evaluate({ graph }) {
+    const out: Finding[] = [];
+    graph.stages.forEach((st, i) => {
+      const next = graph.stages[i + 1];
+      if (!next || st.stepIds.length !== 1 || next.stepIds.length !== 1) return;
+      const a = graph.steps[st.stepIds[0]!]!.step;
+      const b = graph.steps[next.stepIds[0]!]!.step;
+      if (!isPersonStep(a) || !isPersonStep(b) || !a.groups[0] || a.groups[0] !== b.groups[0]) return;
+      out.push({
+        ruleId: 'HC-04', severity: 'info', title: this.title, stepIds: [a.id, b.id], fingerprint: fp('HC-04', a.id, b.id),
+        message: `${a.groups[0]} acts at step ${a.order} and again at step ${b.order}, one after the other.`,
+        suggestedFix: 'If the steps don\'t depend on each other, give them the same order letter so they run in parallel.',
+      });
+    });
+    return out;
+  },
+};
+
+export const HC05_TASK_PILEUP: Rule = {
+  id: 'HC-05',
+  title: 'One group gets several tasks at once',
+  severity: 'info',
+  evaluate({ graph, settings }) {
+    const out: Finding[] = [];
+    for (const st of graph.stages) {
+      const byGroup = new Map<string, Step[]>();
+      for (const id of st.stepIds) {
+        const s = graph.steps[id]!.step;
+        if (!isPersonStep(s) || !s.groups[0]) continue;
+        byGroup.set(s.groups[0], [...(byGroup.get(s.groups[0]) ?? []), s]);
+      }
+      for (const [group, steps] of byGroup) {
+        if (steps.length < settings.maxTasksPerStage) continue;
+        out.push({
+          ruleId: 'HC-05', severity: 'info', title: this.title, stepIds: steps.map((s) => s.id), fingerprint: fp('HC-05', ...steps.map((s) => s.id)),
+          message: `At step ${st.order}, ${group} receives ${steps.length} tasks at the same moment.`,
+          suggestedFix: 'Consider a checklist or one consolidated step so the person sees a single task.',
+        });
+      }
+    }
+    return out;
+  },
+};
+
+export const HC06_LONG_APPROVAL_CHAIN: Rule = {
+  id: 'HC-06',
+  title: 'Long serial approval chain',
+  severity: 'warning',
+  evaluate({ graph, settings }) {
+    const out: Finding[] = [];
+    let run: Step[] = [];
+    const flush = () => {
+      if (run.length > settings.maxSerialApprovals)
+        out.push({
+          ruleId: 'HC-06', severity: 'warning', title: this.title, stepIds: run.map((s) => s.id), fingerprint: fp('HC-06', ...run.map((s) => s.id)),
+          message: `${run.length} approvals run one after another (steps ${run.map((s) => s.order).join(', ')}). Each adds waiting time.`,
+          suggestedFix: 'Run independent approvals in parallel, or raise the thresholds that trigger them.',
+        });
+      run = [];
+    };
+    for (const st of graph.stages) {
+      const steps = st.stepIds.map((id) => graph.steps[id]!.step);
+      if (steps.length === 1 && isApproval(steps[0]!)) run.push(steps[0]!);
+      else flush();
+    }
+    flush();
+    return out;
+  },
+};
+
+export const HC07_CUSTOM_CONDITIONS: Rule = {
+  id: 'HC-07',
+  title: 'Custom conditions to re-check after each Workday release',
+  severity: 'info',
+  evaluate({ def }) {
+    const custom = def.conditions.filter((c) => !c.workdayOwned);
+    if (!custom.length) return [];
+    return [{
+      ruleId: 'HC-07', severity: 'info', title: this.title, stepIds: [...new Set(custom.flatMap((c) => c.stepIds))], fingerprint: fp('HC-07', ...custom.map((c) => c.text)),
+      message: `${custom.length} of ${def.conditions.length} conditions are maintained by your team (${custom.map((c) => c.id).join(', ')}).`,
+      suggestedFix: 'Add them to your release regression checklist: check they still match policy after each Workday release.',
+    }];
+  },
+};
+
+export const RULES: readonly Rule[] = [HC01_SELF_APPROVAL, HC02_NO_ALTERNATE, HC03_NO_DUE_DATE, HC04_SERIAL_SAME_GROUP, HC05_TASK_PILEUP, HC06_LONG_APPROVAL_CHAIN, HC07_CUSTOM_CONDITIONS, HC16_ALWAYS_FALSE];
 
 const SEVERITY_RANK: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
 
-export function runRules(def: ProcessDefinition, rules: readonly Rule[] = RULES): Finding[] {
-  return rules.flatMap((r) => r.evaluate(def)).sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.ruleId.localeCompare(b.ruleId));
+export function runRules(def: ProcessDefinition, rules: readonly Rule[] = RULES, settings: Partial<RuleContext['settings']> = {}): Finding[] {
+  const ctx: RuleContext = { def, graph: buildGraph(def), settings: { maxSerialApprovals: 4, maxTasksPerStage: 3, ...settings } };
+  return rules.flatMap((r) => r.evaluate(ctx)).sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.ruleId.localeCompare(b.ruleId));
 }

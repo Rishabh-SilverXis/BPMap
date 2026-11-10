@@ -2,14 +2,15 @@
  * Workspace (Design System §8.1): DefinitionTabs · Toolbar · [ DiagramCanvas | RightPanel ] · StatusBar.
  * Lazy-loaded by App so the import screen ships without React Flow and the engines (Architecture §23, DEC-022).
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Undo2, Redo2, Download, Copy, FolderOpen, X, Check, Loader2, Plus, ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
 import { useStore as useZustand } from 'zustand';
 import { summaryLine } from '@bpmap/scene';
 import type { Theme } from '@bpmap/design-tokens';
-import { useActiveDefinition, useActiveOverlay, useStore } from '../store/store.ts';
+import { useActiveDefinition, useActiveOverlay, useActiveScenario, useActiveView, useStore } from '../store/store.ts';
+import type { View } from '../store/overlay.ts';
 import { useDiagram, type Diagram } from './derive.ts';
 import { DropZone } from '../features/import/ImportScreen.tsx';
 import { DiagramCanvas } from '../features/canvas/DiagramCanvas.tsx';
@@ -21,7 +22,9 @@ export type Toast = { kind: 'ok' | 'error'; text: string } | null;
 export default function Workspace({ theme, onToast }: { theme: Theme; onToast: (t: Toast) => void }) {
   const def = useActiveDefinition();
   const overlay = useActiveOverlay();
-  const diagram = useDiagram(def, overlay, theme);
+  const scenario = useActiveScenario();
+  const view = useActiveView();
+  const diagram = useDiagram(def, overlay, scenario, view, theme);
   if (!diagram) return null;
   return (
     <>
@@ -83,21 +86,31 @@ function DefinitionTabs() {
 }
 
 function Segmented() {
-  const items = [
-    { id: 'executive', label: 'Executive', enabled: false },
-    { id: 'owner', label: 'Process owner', enabled: true },
-    { id: 'configurator', label: 'Configurator', enabled: false },
+  const view = useActiveView();
+  const setView = useStore((s) => s.setView);
+  const items: { id: View; label: string }[] = [
+    { id: 'executive', label: 'Executive' },
+    { id: 'owner', label: 'Process owner' },
+    { id: 'configurator', label: 'Configurator' },
   ];
+  const onKey = (e: ReactKeyboardEvent) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const i = items.findIndex((x) => x.id === view);
+    const next = items[(i + (e.key === 'ArrowRight' ? 1 : items.length - 1)) % items.length]!;
+    setView(next.id);
+    (e.currentTarget.querySelector(`[data-view="${next.id}"]`) as HTMLElement | null)?.focus();
+  };
   return (
-    <div role="radiogroup" aria-label="View" className="flex rounded-[var(--radius-sm)] border border-border-strong p-0.5">
+    <div role="radiogroup" aria-label="View" className="flex rounded-[var(--radius-sm)] border border-border-strong p-0.5" onKeyDown={onKey}>
       {items.map((it) => (
         <button
           key={it.id}
+          data-view={it.id}
           role="radio"
-          aria-checked={it.id === 'owner'}
-          disabled={!it.enabled}
-          title={it.enabled ? undefined : 'Coming in Phase 2'}
-          className={clsx('rounded-[4px] px-2.5 py-1 text-[13px] font-medium', it.id === 'owner' ? 'bg-primary text-on-primary' : 'text-text-muted disabled:cursor-not-allowed')}
+          aria-checked={it.id === view}
+          tabIndex={it.id === view ? 0 : -1}
+          onClick={() => setView(it.id)}
+          className={clsx('rounded-[4px] px-2.5 py-1 text-[13px] font-medium', it.id === view ? 'bg-primary text-on-primary' : 'text-text-secondary hover:bg-surface-sunken')}
         >
           {it.label}
         </button>
@@ -120,6 +133,8 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
   const canRedo = useZustand(useStore.temporal, (s) => s.futureStates.length > 0);
   const definitions = useStore((s) => s.definitions);
   const overlays = useStore((s) => s.overlays);
+  const scenarios = useStore((s) => s.scenarios);
+  const views = useStore((s) => s.views);
   const replaceProject = useStore((s) => s.replaceProject);
   const openInput = useRef<HTMLInputElement>(null);
   const menu = useRef<HTMLDetailsElement>(null);
@@ -172,7 +187,7 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
             {[
               { label: 'SVG', hint: 'Vector image for documents and wikis', fn: () => download(svgBlob(diagram.def, diagram.scene), `${base}.svg`), ok: 'SVG downloaded' },
               { label: 'PNG (2×)', hint: 'For chat, email and slides', fn: async () => download(await pngBlob(diagram.def, diagram.scene), `${base}.png`), ok: 'PNG downloaded' },
-              { label: 'Project file', hint: 'All definitions + customisations (.bpmap.json)', fn: () => download(projectBlob(definitions, overlays), `${base}.bpmap.json`), ok: 'Project file downloaded' },
+              { label: 'Project file', hint: 'All definitions + customisations (.bpmap.json)', fn: () => download(projectBlob({ definitions, overlays, scenarios, views }), `${base}.bpmap.json`), ok: 'Project file downloaded' },
             ].map((m) => (
               <button key={m.label} role="menuitem" type="button" onClick={() => void run(m.fn, m.ok)} className="flex w-full flex-col items-start rounded-[var(--radius-sm)] px-3 py-2 text-left hover:bg-surface-sunken">
                 <span className="text-sm font-medium">{m.label}</span>
@@ -195,11 +210,16 @@ function StatusBar({ diagram }: { diagram: Diagram }) {
     <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-border bg-surface px-4 text-xs text-text-secondary">
       <span>{summaryLine(diagram.def, diagram.graph)}</span>
       {warnings > 0 && (
-        <button type="button" onClick={() => setPanel('report')} className="font-semibold text-warning hover:underline">
+        <button type="button" onClick={() => setPanel('report')} className="font-semibold text-warning hover:underline" title="Open the Import tab">
           ⚠ {warnings} import warning{warnings === 1 ? '' : 's'}
         </button>
       )}
       {diagram.overlay.hidden.length > 0 && <span>{diagram.overlay.hidden.length} hidden</span>}
+      {diagram.outcome.summary && (
+        <span className="font-semibold text-on-conditional-subtle">
+          {diagram.outcome.summary} · {diagram.outcome.skipped.size} step{diagram.outcome.skipped.size === 1 ? '' : 's'} skipped
+        </span>
+      )}
       <span className="ml-auto flex items-center gap-1">
         {saveState === 'saving' && (
           <>

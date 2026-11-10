@@ -248,3 +248,47 @@ Source: a real *Change Job (Default Definition)* export (26 steps, 6 sheets), co
 ## DEC-033 · Legend and condition list keep a fixed reading width
 - **Decision:** Legend columns are capped at 290 px, and condition-list columns at 600 px, whatever the diagram's width.
 - **Why:** The legend's columns were a quarter of the diagram's width, which spread the items across a 26-stage diagram about 4,000 px wide. The user's screenshot showed "Action or review" thousands of pixels from "Approval".
+
+---
+
+# Phase 2 · Increment 2.1: views, scenarios, health (2026-11-11)
+
+Phase 2 ("Parity+") is split in two. **2.1** (this increment) covers views (VW-01/03/04), scenarios (SCN-01..03), health rules (HLT-01/02 with HC-01..07) and the Phase 1 leftovers that gate everything else (automated privacy e2e and CI). **2.2** covers exports (PDF, PPTX, draw.io), packs, re-import reconciliation (IMP-06), focus role (VIS-08) and the screen-reader step list.
+
+## DEC-034 · Scenario semantics: "No" skips, "Yes" resolves, "Not set" may run
+- **Decision:** New package `@bpmap/engine-scenario`. A step is skipped if any of its conditions is answered **No**. A condition answered **Yes** is *resolved*: it no longer makes a step conditional, so the dashed outline, its badge and the decision diamond disappear for that case. **Not set** leaves the step conditional (dashed).
+  - `buildGraph` takes `resolvedConditionIds` and `decisionConditionIds`. `GraphStep.conditional` now means "has an *unresolved* condition", and `openConditionIds` drives badges and diamond labels.
+  - Skipped steps are removed through the same `hiddenStepIds` path as overlay-hidden steps, so empty lanes and stages collapse with no extra code.
+  - Scenario state (answers, decisions, presets) is stored per definition, persisted, included in project files, undoable like overlays, and pruned to existing conditions on re-import.
+- **Why:** Architecture §10.1 defined skipping. Resolving "Yes" answers is what makes a scenario diagram *read* as a single path rather than a sea of dashed boxes.
+- **Verified on the real export:** C6 = No removes the four approvals (26 → 22 steps, lanes 11 → 7), and save / reset / re-apply of a preset works.
+
+## DEC-035 · Views: Configurator = detail lines; Executive = stage cards from the scene
+- **Decision:**
+  - **Configurator:** boxes are 140 px tall, with up to 4 detail lines from `stepMetaLines` (due, alternate, routing, restriction, extra groups, run-as, validations, notifications, do-not-advance; "+n more" beyond 4). The scene and the canvas node use the same function.
+  - **Executive:** `executiveLayout` (engine-layout, text measurement injected) places one card per stage, 6 per row, snaking arrows between rows. `buildExecutiveDiagram` draws the cards with a dot per step coloured by kind, the title, and a caption "lane · only if C… · process complete". The canvas shows Executive as background only (no interactive nodes).
+  - The view is stored per definition (VW-04), drives exports, and is named in the export subtitle.
+- **Why:** Matches DS §11's view matrix. Text measurement stays in the scene package, so layout remains font-free and testable.
+- **Bug caught in the browser:** the first Executive render showed only arrows. The cards had the scene role `step`, which the canvas deliberately skips because React Flow draws steps live. Cards now have their own role, `stage-card`, plus a unit test and an e2e assertion (26 cards).
+
+## DEC-036 · Health rules HC-01..HC-07: rules skip themselves when their column is missing
+- **Decision:** Rules receive `{ def, graph, settings }`, with `maxSerialApprovals = 4` and `maxTasksPerStage = 3`.
+  - HC-01, HC-02 and HC-03 return nothing when no step in the export has a value for the column they rely on (restriction, alternate, due date).
+  - HC-07 is a single summary finding, not one per condition.
+  - HC-02 ignores optional steps and "Employee As Self" / "Initiator" groups.
+  - Health always runs on the **full** definition, not the scenario.
+- **Why:** Without the skip, an export that lacks a column (like our synthetic sample) would produce a wall of false "critical" findings. On the real-layout fixture, HC-01 correctly flags approval `i`, which is restricted to "Subject" only, so the initiator could approve. The real file has the same pattern.
+- **Dismissals (HLT-02):** each finding can be dismissed with a reason. Dismissals are stored in the overlay by fingerprint (so they're undoable and survive re-import) and can be restored from a "Dismissed" list. Older stored overlays without `dismissedFindings` are upgraded on load (`normaliseOverlay`).
+
+## DEC-037 · Health badge counts Critical + Warning only
+- **Decision:** The tab badge shows open Critical + Warning findings. Info findings are listed, grouped by rule (groups with more than 3 findings start collapsed), but don't count.
+- **Why:** On the real export the badge first read **34**, mostly Info ("no due date"). A number that large reads as "everything is broken" and trains people to ignore it. It now reads 14.
+
+## DEC-038 · E2E with Playwright on the system Chrome; CI on GitHub Actions
+- **Decision:** `@playwright/test` with `channel: 'chrome'` runs against the **production build** (`vite preview`, CSP active).
+  - `privacy.spec.ts` (NFR-PRIV-01) records every request through import → three views → scenario → Health → SVG export, and asserts no off-origin request, no request body and no CSP violation.
+  - `flows.spec.ts` covers Workday order and diamonds, scenario skip and reset, views, and the dismiss → reload → restore cycle.
+  - `.github/workflows/ci.yml` runs typecheck → unit tests → build with a secret scan of `dist/` → e2e, uploading traces on failure. Browser download is skipped; the runner's Google Chrome is used.
+- **Why:** The privacy promise is the product's main differentiator (PRD §2.2), so it must be enforced by a test, not by a manual check. Using the installed Chrome avoids a large browser download on every machine.
+- **Results:** 5/5 e2e tests pass locally. The first run failed in 2 tests because of an ambiguous test locator (`'No'` also matched "**No**t set"), fixed with `exact: true`.
+- **Consequences:** Actions are pinned to major tags (`@v4`); pinning to commit SHAs is a follow-up once Renovate is set up. Bundle check: initial JS is 169 KB gzip + 8 KB CSS = **177 KB of the 180 KB budget**. Increment 2.2 must move the zod validation of stored data off the initial chunk before adding more to it.

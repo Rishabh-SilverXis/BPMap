@@ -3,7 +3,7 @@
  * geometry. Columns = stages (order letters), rows = lanes (security groups), plus the transitions
  * between consecutive stages. Pure and deterministic.
  */
-import { SYSTEM_KINDS, compareStageKeys, slug, type ProcessDefinition, type StageKey, type Step, type StepId } from '@bpmap/model';
+import { APPROVAL_KINDS, SYSTEM_KINDS, compareStageKeys, slug, type ProcessDefinition, type StageKey, type Step, type StepId } from '@bpmap/model';
 
 export interface GraphLane {
   id: string;
@@ -23,7 +23,12 @@ export interface GraphStep {
   step: Step;
   laneId: string;
   stageIndex: number;
+  /** Has at least one condition that is not resolved ("yes") in the current scenario. */
   conditional: boolean;
+  /** Conditions still open for this case (badges, diamond label). */
+  openConditionIds: string[];
+  /** Draw a yes/no decision diamond: conditional approvals by default, or any step with a toggled condition (SCN-02). */
+  decision: boolean;
 }
 
 export interface SemanticGraph {
@@ -38,6 +43,10 @@ export interface SemanticGraph {
 export interface GraphOptions {
   hiddenStepIds?: ReadonlySet<string>;
   laneNames?: Readonly<Record<string, string>>;
+  /** Conditions answered "yes" in the scenario (DEC-034). */
+  resolvedConditionIds?: ReadonlySet<string>;
+  /** Conditions the user wants drawn as decisions on any step kind (SCN-02). */
+  decisionConditionIds?: ReadonlySet<string>;
 }
 
 export const SYSTEM_LANE = { service: 'Workday (automatic)', integration: 'Integrations' } as const;
@@ -53,6 +62,8 @@ function laneLabelOf(step: Step): { label: string; system: boolean } {
 
 export function buildGraph(def: ProcessDefinition, opts: GraphOptions = {}): SemanticGraph {
   const hidden = opts.hiddenStepIds ?? new Set<string>();
+  const resolved = opts.resolvedConditionIds ?? new Set<string>();
+  const decisions = opts.decisionConditionIds ?? new Set<string>();
   const visible = def.steps.filter((s) => !hidden.has(s.id));
   const ordered = [...visible].sort((a, b) => compareStageKeys(a.stageKey, b.stageKey) || a.sourceRow - b.sourceRow);
 
@@ -91,7 +102,9 @@ export function buildGraph(def: ProcessDefinition, opts: GraphOptions = {}): Sem
   stages.forEach((st, stageIndex) => {
     for (const id of st.stepIds) {
       const step = visible.find((s) => s.id === id)!;
-      steps[id] = { step, laneId: laneByLabel.get(laneLabelOf(step).label)!.id, stageIndex, conditional: step.conditionIds.length > 0 };
+      const open = step.conditionIds.filter((c) => !resolved.has(c));
+      const decision = open.length > 0 && (APPROVAL_KINDS.has(step.kind) || open.some((c) => decisions.has(c)));
+      steps[id] = { step, laneId: laneByLabel.get(laneLabelOf(step).label)!.id, stageIndex, conditional: open.length > 0, openConditionIds: open, decision };
     }
   });
 

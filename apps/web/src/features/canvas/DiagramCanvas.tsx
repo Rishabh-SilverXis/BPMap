@@ -6,7 +6,7 @@
 import { useCallback, useMemo } from 'react';
 import { ControlButton, Controls, MiniMap, ReactFlow, ViewportPortal, useReactFlow, type NodeChange } from '@xyflow/react';
 import { Maximize } from 'lucide-react';
-import { EXPORT_DIAGRAM_OFFSET, stepTitle } from '@bpmap/scene';
+import { EXPORT_DIAGRAM_OFFSET, clampMeta, stepMetaLines, stepTitle } from '@bpmap/scene';
 import { KIND_LABEL } from '@bpmap/model';
 import { nodeTokens, semantic, type Theme } from '@bpmap/design-tokens';
 import type { Diagram } from '../../app/derive.ts';
@@ -28,11 +28,13 @@ export function DiagramCanvas({ diagram, theme }: { diagram: Diagram; theme: The
     [fitBounds, diagram.scene.width, diagram.scene.height],
   );
 
+  // Executive view is stage cards drawn entirely by the scene; no interactive step nodes (DEC-035).
   const nodes = useMemo<StepFlowNode[]>(
     () =>
-      diagram.layout.nodes.map((n) => {
-        const step = diagram.graph.steps[n.id]!.step;
-        const conds = step.conditionIds.length ? `, runs only if ${step.conditionIds.join(' and ')}` : '';
+      diagram.view === 'executive' ? [] : diagram.layout.nodes.map((n) => {
+        const gs = diagram.graph.steps[n.id]!;
+        const step = gs.step;
+        const conds = gs.openConditionIds.length ? `, runs only if ${gs.openConditionIds.join(' and ')}` : '';
         return {
           id: n.id,
           type: 'step',
@@ -43,7 +45,15 @@ export function DiagramCanvas({ diagram, theme }: { diagram: Diagram; theme: The
           draggable: false,
           connectable: false,
           ariaLabel: `${KIND_LABEL[step.kind]}, step ${step.order}, ${step.groups[0] ?? 'system'}: ${stepTitle(step, diagram.overlay.labels[n.id])}${conds}`,
-          data: { step, label: diagram.overlay.labels[n.id], note: diagram.overlay.notes[n.id], tokens, surface },
+          data: {
+            step,
+            openConditionIds: gs.openConditionIds,
+            label: diagram.overlay.labels[n.id],
+            note: diagram.overlay.notes[n.id],
+            ...(diagram.view === 'configurator' ? { meta: clampMeta(stepMetaLines(step, diagram.def)) } : {}),
+            tokens,
+            surface,
+          },
         };
       }),
     [diagram, selected, tokens, surface],
@@ -62,7 +72,7 @@ export function DiagramCanvas({ diagram, theme }: { diagram: Diagram; theme: The
 
   return (
     <ReactFlow
-      key={diagram.def.id}
+      key={`${diagram.def.id}|${diagram.view}`}
       nodes={nodes}
       nodeTypes={nodeTypes}
       onNodesChange={onNodesChange}
@@ -85,7 +95,7 @@ export function DiagramCanvas({ diagram, theme }: { diagram: Diagram; theme: The
           <Maximize />
         </ControlButton>
       </Controls>
-      <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => ((n as StepFlowNode).data.step.conditionIds.length ? tokens.conditionalBorder : tokens.approval.bg)} />
+      <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => ((n as StepFlowNode).data.openConditionIds.length ? tokens.conditionalBorder : tokens.approval.bg)} />
     </ReactFlow>
   );
 }

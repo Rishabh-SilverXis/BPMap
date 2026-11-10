@@ -5,7 +5,8 @@
  */
 import { slug, parseProject, withFreshStageKeys, SCHEMA_VERSION, type ProcessDefinition } from '@bpmap/model';
 import { toSvg, type Scene } from '@bpmap/scene';
-import { isOverlay, type Overlay } from '../../store/overlay.ts';
+import { isView, normaliseOverlay, type Overlay, type View } from '../../store/overlay.ts';
+import { isScenarioState, type ScenarioState } from '@bpmap/engine-scenario';
 
 export const fileBase = (def: ProcessDefinition) => slug(`${def.process} ${def.variant}`) || 'business-process';
 const title = (def: ProcessDefinition) => (def.variant ? `${def.process} (${def.variant})` : def.process);
@@ -58,9 +59,18 @@ export interface ProjectFile {
   exportedAt: string;
   project: { schemaVersion: number; id: string; name: string; definitions: ProcessDefinition[]; createdAt: string; updatedAt: string };
   overlays: Record<string, Overlay>;
+  scenarios?: Record<string, ScenarioState>;
+  views?: Record<string, View>;
 }
 
-export function projectBlob(definitions: ProcessDefinition[], overlays: Record<string, Overlay>): Blob {
+export interface ProjectContents {
+  definitions: ProcessDefinition[];
+  overlays: Record<string, Overlay>;
+  scenarios: Record<string, ScenarioState>;
+  views: Record<string, View>;
+}
+
+export function projectBlob({ definitions, overlays, scenarios, views }: ProjectContents): Blob {
   const now = new Date().toISOString();
   const file: ProjectFile = {
     format: 'bpmap',
@@ -68,11 +78,13 @@ export function projectBlob(definitions: ProcessDefinition[], overlays: Record<s
     exportedAt: now,
     project: { schemaVersion: SCHEMA_VERSION, id: 'local', name: definitions[0]?.process ?? 'BPMap project', definitions, createdAt: now, updatedAt: now },
     overlays,
+    scenarios,
+    views,
   };
   return new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
 }
 
-export async function readProjectFile(file: File): Promise<{ definitions: ProcessDefinition[]; overlays: Record<string, Overlay> }> {
+export async function readProjectFile(file: File): Promise<ProjectContents> {
   if (file.size > 25 * 1024 * 1024) throw new Error('This project file is too large.');
   let json: unknown;
   try {
@@ -86,6 +98,13 @@ export async function readProjectFile(file: File): Promise<{ definitions: Proces
   const parsed = parseProject(f.project);
   if (!parsed.ok) throw new Error(`The project file is damaged: ${parsed.error}`);
   const overlays: Record<string, Overlay> = {};
-  for (const [k, v] of Object.entries(f.overlays ?? {})) if (isOverlay(v)) overlays[k] = v;
-  return { definitions: parsed.value.definitions.map(withFreshStageKeys), overlays };
+  for (const [k, v] of Object.entries(f.overlays ?? {})) {
+    const o = normaliseOverlay(v);
+    if (o) overlays[k] = o;
+  }
+  const scenarios: Record<string, ScenarioState> = {};
+  for (const [k, v] of Object.entries(f.scenarios ?? {})) if (isScenarioState(v)) scenarios[k] = v;
+  const views: Record<string, View> = {};
+  for (const [k, v] of Object.entries(f.views ?? {})) if (isView(v)) views[k] = v;
+  return { definitions: parsed.value.definitions.map(withFreshStageKeys), overlays, scenarios, views };
 }
