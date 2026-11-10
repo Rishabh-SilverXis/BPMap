@@ -127,8 +127,10 @@ Runs on every change of the active definition, its overlay, its scenario, its vi
  ├ <DiagramViewer diagram theme/>                          features/canvas/DiagramViewer.tsx (DEC-042)
  │    ├ scroll container (overflow:auto, ResizeObserver) → zoom: user | fitHeight/fitWidth clamped 60–100%
  │    ├ sized box (scene × zoom)
- │    │    ├ sticky lane column: translate(laneHeaderItems(lane)) at the scene's own coordinates   (not in Executive)
- │    │    └ scaled layer: <SceneSvg skip={['step']}/> + <StepNode> buttons at node + EXPORT_DIAGRAM_OFFSET
+ │    │    ├ sticky layer (viewport-wide, pointer-events none):
+ │    │    │    ├ lane column: translate(laneHeaderItems(lane)) at the scene's own coordinates   (not in Executive)
+ │    │    │    └ furniture: scene groups header/legend/conditions/footer, when they fit the width (DEC-043)
+ │    │    └ scaled layer: <SceneSvg skip={['step', …furniture if pinned]}/> + <StepNode> buttons at node + EXPORT_DIAGRAM_OFFSET
  │    ├ zoom toolbar (−/+, 100%, Fit height, Fit width); Ctrl/⌘ + wheel → zoomTo(z, cursor) keeps the point under the cursor
  │    └ selection: StepNode onClick → store.select(id); background click → select(null);
  │                 selectedStepId change → scrollIntoView(center)

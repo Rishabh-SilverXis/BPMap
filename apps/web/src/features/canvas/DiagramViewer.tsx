@@ -15,17 +15,20 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { Minus, Plus, MoveVertical, MoveHorizontal } from 'lucide-react';
-import { EXPORT_DIAGRAM_OFFSET, LANE_HEADER_WIDTH, clampMeta, laneHeaderItems, stepMetaLines, stepTitle, translate } from '@bpmap/scene';
+import { EXPORT_DIAGRAM_OFFSET, LANE_HEADER_WIDTH, clampMeta, groupTop, laneHeaderItems, stepMetaLines, stepTitle, translate, type SceneItem, type SceneRole } from '@bpmap/scene';
 import { KIND_LABEL } from '@bpmap/model';
 import { nodeTokens, semantic, type Theme } from '@bpmap/design-tokens';
 import type { Diagram } from '../../app/derive.ts';
 import { useStore } from '../../store/store.ts';
-import { SceneSvg } from './SceneSvg.tsx';
+import { Item, SceneSvg } from './SceneSvg.tsx';
 import { StepNode } from './StepNode.tsx';
 
 const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 2;
 const STEPS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+const FURNITURE: SceneRole[] = ['header', 'legend', 'conditions', 'footer'];
+/** Widest the legend + two condition columns get (scene units): 2 × 600 + gaps + margins (DEC-033). */
+const FURNITURE_WIDTH = 1300;
 const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
 
 export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: Theme }) {
@@ -126,6 +129,13 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: The
   const frozenWidth = ox + LANE_HEADER_WIDTH;
   const laneTop = oy + (L.lanes[0]?.y ?? 0);
   const laneBottom = oy + (L.lanes.at(-1) ? L.lanes.at(-1)!.y + L.lanes.at(-1)!.height : 0);
+  // Page furniture pinned horizontally (DEC-043). Only when it fits the visible width; otherwise it
+  // would be clipped with no way to scroll to it, so it scrolls with the diagram instead.
+  const pinnedW = Math.min(size.w || scene.width * z, scene.width * z);
+  const pinFurniture = Math.min(FURNITURE_WIDTH, scene.width) * z <= pinnedW + 1;
+  const furniture = useMemo(() => scene.items.filter((i): i is SceneItem => i.t === 'group' && FURNITURE.includes(i.role)), [scene]);
+  const headerBottom = (groupTop(scene, 'header') ?? 0) + 52;
+  const furnitureTop = (groupTop(scene, 'legend') ?? scene.height) - 16;
   const frozenItems = useMemo(() => translate(L.lanes.flatMap((l) => laneHeaderItems(l, theme)), ox, oy), [L.lanes, theme, ox, oy]);
 
   return (
@@ -145,29 +155,31 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: The
             if (!(e.target as HTMLElement).closest('[data-step-id]')) select(null);
           }}
         >
-          {hasLanes && (
-            <div
-              aria-hidden="true"
-              data-testid="frozen-lanes"
-              className={clsx('pointer-events-none sticky left-0 top-0 z-20', scrolledX && 'drop-shadow-[2px_0_4px_rgba(15,23,42,0.18)]')}
-              style={{ width: frozenWidth * z, height: scene.height * z }}
-            >
-              <svg width={frozenWidth * z} height={scene.height * z} viewBox={`0 0 ${frozenWidth} ${scene.height}`} fontFamily="'Inter Variable', Inter, -apple-system, 'Segoe UI', Roboto, sans-serif">
-                <rect x={0} y={laneTop} width={frozenWidth} height={laneBottom - laneTop} fill={scene.background} />
-                {frozenItems.map((it, i) =>
-                  it.t === 'rect' ? (
-                    <rect key={i} x={it.x} y={it.y} width={it.w} height={it.h} fill={it.fill} stroke={it.stroke} strokeWidth={it.strokeWidth} />
-                  ) : it.t === 'text' ? (
-                    <text key={i} x={it.x} y={it.y} fontSize={it.size} fontWeight={it.weight} fill={it.fill}>
-                      {it.text}
-                    </text>
-                  ) : null,
-                )}
+          {/* Pinned layer (DEC-042, DEC-043): stays put while the diagram scrolls sideways. Holds the
+              lane-name column and the page furniture (title header, legend, conditions, footer). */}
+          <div aria-hidden="true" className="pointer-events-none sticky left-0 top-0 z-20" style={{ width: pinnedW, height: scene.height * z }}>
+            {pinFurniture && (
+              <svg data-testid="pinned-furniture" className="absolute left-0 top-0" width={pinnedW} height={scene.height * z} viewBox={`0 0 ${pinnedW / z} ${scene.height}`} fontFamily="'Inter Variable', Inter, -apple-system, 'Segoe UI', Roboto, sans-serif">
+                <rect x={0} y={0} width={pinnedW / z} height={headerBottom} fill={scene.background} />
+                <rect x={0} y={furnitureTop} width={pinnedW / z} height={scene.height - furnitureTop} fill={scene.background} />
+                {furniture.map((it, i) => (
+                  <Item key={i} it={it} />
+                ))}
               </svg>
-            </div>
-          )}
+            )}
+            {hasLanes && (
+              <div data-testid="frozen-lanes" className={clsx('absolute left-0 top-0', scrolledX && 'drop-shadow-[2px_0_4px_rgba(15,23,42,0.18)]')} style={{ width: frozenWidth * z, height: scene.height * z }}>
+                <svg width={frozenWidth * z} height={scene.height * z} viewBox={`0 0 ${frozenWidth} ${scene.height}`} fontFamily="'Inter Variable', Inter, -apple-system, 'Segoe UI', Roboto, sans-serif">
+                  <rect x={0} y={laneTop} width={frozenWidth} height={laneBottom - laneTop} fill={scene.background} />
+                  {frozenItems.map((it, i) => (
+                    <Item key={i} it={it} />
+                  ))}
+                </svg>
+              </div>
+            )}
+          </div>
           <div className="absolute left-0 top-0 origin-top-left" style={{ width: scene.width, height: scene.height, transform: `scale(${z})` }}>
-            <SceneSvg scene={scene} skip={['step']} />
+            <SceneSvg scene={scene} skip={pinFurniture ? ['step', ...FURNITURE] : ['step']} />
             {nodes.map((n) => (
               <StepNode key={n.id} id={n.id} data={n.data} style={n.style} selected={n.id === selected} ariaLabel={n.ariaLabel} onSelect={select} />
             ))}

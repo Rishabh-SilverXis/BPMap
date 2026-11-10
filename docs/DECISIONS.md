@@ -334,3 +334,10 @@ Phase 2 ("Parity+") is split in two. **2.1** (this increment) covers views (VW-0
   - Stage headers ("Step k") scroll away vertically. A frozen top row is a possible follow-up.
   - Free-form node dragging (VIS-11 nudges) will need its own pointer handling when it's built.
   - Architecture §11.2/§15 are updated to match.
+
+## DEC-043 · Pin the page furniture too: title, legend, conditions, footer
+- **Date:** 2026-11-11 · **Serves:** user request ("the lower half should also stay fixed"), VIS-06
+- **Decision:** The viewer's sticky layer is now as wide as the visible area. Besides the lane column, it holds the scene groups `header`, `legend`, `conditions` and `footer` (the footer is now its own group), on a surface background. The scrolling layer skips those groups, so nothing is drawn twice. `groupTop()` (scene) finds where the legend starts so the pinned background covers exactly that band.
+- **Why:** The legend and the condition list sit in the scene's lower-left. On a wide process they scrolled away as soon as you moved right, which is exactly when you need them to decode C-badges.
+- **Limit (deliberate):** furniture is pinned only when its full width (~1,300 px of scene × zoom) fits the visible area. Otherwise a pinned block would be clipped with no way to scroll to its right half, so it scrolls with the diagram instead (e.g. at 100% zoom in a narrow window).
+- **Verified:** scrolled 2,500 px right and to the bottom on the real export, the legend and conditions stay at the left edge with one copy. The e2e viewer test asserts this.

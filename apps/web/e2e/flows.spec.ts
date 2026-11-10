@@ -55,6 +55,11 @@ test('viewer: fixed diagram scrolls natively, lane column stays frozen, zoom con
   await scroller.evaluate((el) => (el.scrollLeft = 1500));
   const [s, f] = await Promise.all([scroller.boundingBox(), frozen.boundingBox()]);
   expect(Math.round(f!.x - s!.x)).toBe(0); // still pinned to the left edge after scrolling
+  const furniture = page.getByTestId('pinned-furniture'); // legend + conditions + title (DEC-043)
+  await expect(furniture).toBeAttached();
+  const fb = await furniture.boundingBox();
+  expect(Math.round(fb!.x - s!.x)).toBe(0);
+  await expect(page.locator('[role=region] svg g[data-role=legend]')).toHaveCount(1); // drawn once, not duplicated
   await expect(page.getByTestId('zoom-level')).toHaveText(/%$/);
   await page.getByRole('button', { name: 'Zoom in' }).click();
   await page.getByTestId('zoom-level').click();

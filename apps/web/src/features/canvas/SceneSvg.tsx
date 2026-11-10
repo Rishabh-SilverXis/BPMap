@@ -5,7 +5,7 @@
 import { memo } from 'react';
 import type { Scene, SceneItem, SceneRole } from '@bpmap/scene';
 
-function Item({ it }: { it: SceneItem }) {
+export function Item({ it }: { it: SceneItem }) {
   switch (it.t) {
     case 'rect':
       return <rect x={it.x} y={it.y} width={it.w} height={it.h} rx={it.r} fill={it.fill} stroke={it.stroke} strokeWidth={it.strokeWidth} strokeDasharray={it.dash?.join(' ')} />;
