@@ -8,13 +8,9 @@ Legend: `→` calls / passes data to · `⇢` async (worker message, promise, ti
 
 ## Current work
 
-> **Increment 1 ✅ complete** (Phase 0 + the Phase 1 core). Every path below is built, unit-tested (92 tests) and was exercised in the browser (dev and production builds).
+> **Increment 1.1 ✅ complete**: fixes from the first real Workday export (DEC-026 to DEC-033). Built, tested (108 tests) and checked in the browser against the real file (kept in the git-ignored `.local/`).
 >
-> ⏭ **Next (Increment 2, rest of Phase 1):**
-> 1. Playwright e2e with the automated *network-privacy* test (NFR-PRIV-01). Today this is checked manually.
-> 2. A screen-reader step list (`role="treegrid"`) and keyboard navigation between steps (NFR-A11Y).
-> 3. CI pipeline and ESLint import-boundary rules (Architecture §5, §20).
-> 4. Replace the synthetic fixtures with anonymised real exports (T1). This needs files from you.
+> ⏭ **Next (Increment 2):** Playwright e2e with the automated network-privacy test, a screen-reader step list, CI and import-boundary lint, then Phase 2 (three views, scenarios, PDF/PPTX export, more health rules).
 >
 > No path is being modified at the moment.
 
@@ -74,28 +70,35 @@ importWorkbook(bytes, opts)                               packages/importer-xlsx
  │    ├ size ≤ 25 MB → magic bytes "PK"
  │    ├ fflate.unzipSync(bytes, { filter })               filter runs BEFORE inflate per entry:
  │    │     entries ≤ 2000, Σ originalSize ≤ 150 MB → else XlsxError(E-ZIP-LIMITS)
- │    │     keep only workbook.xml, workbook.xml.rels, sharedStrings.xml, worksheets/*.xml
- │    ├ XMLParser.parse(workbook.xml) → sheet names + r:id → rels → worksheets/sheetN.xml
- │    ├ sharedStrings → itemText(si)   (plain <t> or rich-text runs)
- │    └ per sheet: rows/cells → colIndex("C12") → typed text (s | inlineStr | b | str/n/e) → SheetGrid
- ├→ per sheet: findStepsHeader(rows, 15) (≥ 4 fields) ▸ looksLikeNotifications ▸ ignored   mapping.ts
- ├→ no Steps sheet → bestGuessHeader → mapping from opts.mapping | opts.mappingProfiles
- │        └ none / incomplete → return { needs-mapping, fingerprint, headers, suggested, missing }
- ├→ choose map: explicit ▸ saved profile ▸ auto  → missingRequired? → needs-mapping
+ │    ├ XMLParser: workbook.xml → rels → sharedStrings → worksheets/sheetN.xml
+ │    └ per sheet: typed cell text (s | inlineStr | b | str/n/e) → SheetGrid   (raw text, NOT decoded)
+ ├→ per sheet: sectionTitle(rows)          mapping.ts   one-cell title row → steps | notifications | other   (DEC-028)
+ │      steps → findStepsHeader (≥ 4 fields); no title → findStepsHeader ▸ looksLikeNotifications ▸ ignored
+ ├→ no Steps sheet → bestGuessHeader → mapping from opts.mapping | opts.mappingProfiles | needs-mapping
+ ├→ choose map: explicit ▸ saved profile ▸ auto (17 columns)  → missingRequired? → needs-mapping
  ├→ normaliseSteps({ rows, headerRowIndex, map, preamble, … })   normalise.ts
- │    ├ data rows = below header with order or type
- │    ├ processName(): Step label regex ▸ preamble title ▸ file name (+ W-PROCESS-NAME-GUESSED)
- │    ├ drafts: stageKeyOf(order), kindOf(type), lines(groups), condition lines (+ "(Workday Owned)")
- │    ├ makeStepIds(drafts)                               @bpmap/model ids.ts → W-DUP-STEP on "~n"
+ │    ├ get(row, field) → decodeCell()     decode.ts   "&#xa;" → "\n", entities → chars (DEC-027)
+ │    │                    hasEncodingResidue() counts leftovers → W-ENCODING
+ │    ├ parsePreamble(): effective date (excelDate), due date, autocomplete, Initiating Security Groups
+ │    ├ processName(): Step label regex ▸ "Edit Business Process Definition: X (Y)" ▸ file name
+ │    ├ drafts: stageKeyOf(order)  (alphabetical, DEC-026), kindOf(type), cellLines(groups),
+ │    │         cellLines(conditions) + "(Workday Owned)", splitAdditionalInfo (restriction/alternate),
+ │    │         parseValidations (severity), routing, runAs, all, doNotAdvance, dueOnEffectiveDate, complete
+ │    ├ makeStepIds(drafts)                               @bpmap/model ids.ts → W-DUP-STEP
+ │    ├ row order vs stage-key order → W-ORDER-MISMATCH
  │    ├ conditions: sort by (stageKey, sourceRow) → dedupe by normalised text → C1…Cn
- │    └ warnings: W-ORDER-UNPARSEABLE, W-KIND-UNKNOWN, W-GROUP-EMPTY, W-NO-INITIATION, truncation
+ │    └ warnings: ORDER-UNPARSEABLE, KIND-UNKNOWN, GROUP-EMPTY, NO-INITIATION, truncation, ENCODING
+ ├→ parseNotifications(notificationsSheet, steps)         notifications.ts   (DEC-029)
+ │    ├ "System Notifications" table → kind:'system', linked by order (+ specify)
+ │    └ "Custom Notifications" table → kind:'custom', trigger "On Exit : o - …" → step o; else unlinked
+ │          unlinked > 0 → W-NOTIF-UNLINKED
  ├→ parseDefinition(draft)                                @bpmap/model (zod gate)
  └→ { ok, definition, stats, sheets, mappingUsed }
 ```
 
 ## 3. Model → screen (derivation) ✅
 
-Runs on every change of the active definition, its overlay, or the theme.
+Runs on every change of the active definition, its overlay, or the theme. Stored definitions are passed through `withFreshStageKeys` on load (DEC-026 migration).
 
 ```
 <Workspace theme onToast>                                  app/Workspace.tsx (lazy)
@@ -108,15 +111,20 @@ Runs on every change of the active definition, its overlay, or the theme.
  │    │     └ transitions: consecutive stages (i → i+1)
  │    ├ layout(graph)                                      packages/engine-layout
  │    │     ├ lane height = stack depth × node + padding
- │    │     ├ stage x/width (wider when parallel); node centred, stacked within a cell
- │    │     ├ split/join bars + stubs for parallel stages
- │    │     └ transitions routed in the gutter between columns (DEC-013)
+ │    │     ├ stage x/width (wider when parallel; +96 px when it holds a conditional approval)
+ │    │     ├ nodes right-aligned in the column, stacked within a cell
+ │    │     ├ diamonds before conditional approvals: "yes-" edge in, "skip-" edge under & after (DEC-032)
+ │    │     ├ split/join bars + stubs (stubs enter the diamond when there is one)
+ │    │     ├ transitions routed in the gutter between columns (DEC-013), entering diamonds
+ │    │     └ start marker → first stage; last stage → end marker
+ │    ├ runRules(def)                                      packages/engine-rules  (HC-16 → Health tab)
  │    └ buildExportScene(def, graph, L, theme, { labels, notes })   packages/scene
  │          ├ header (title + summaryLine)
  │          ├ translate(buildDiagramScene(...), EXPORT_DIAGRAM_OFFSET)
- │          │     lanes · stage headers · edges · bars · step groups (kind tag, wrapText title,
+ │          │     lanes · stage headers · edges (Yes / "No, skip" pill labels) · decisions
+ │          │     ("C5 and C6?") · markers · bars · step groups (kind tag, wrapText title,
  │          │     C-badges, N badge, completion ✓; dashed amber if conditional)
- │          ├ legend (+ exceptions note) · condition list (2 columns) · footer disclaimer
+ │          ├ legend (≤ 290 px columns, DEC-033) · condition list (≤ 600 px columns) · footer
  │          └ colours from nodeTokens(theme)/semantic[theme]   packages/design-tokens
  ├ <DefinitionTabs/> · <Toolbar diagram/> · <StatusBar diagram/>   (summaryLine, warnings, save state)
  ├ <DiagramCanvas diagram theme/>                          features/canvas/DiagramCanvas.tsx
@@ -128,8 +136,10 @@ Runs on every change of the active definition, its overlay, or the theme.
  │    │    └ <Controls> (custom Fit button) · <MiniMap>
  │    └ selection: onNodesChange('select') / onPaneClick → store.select(id | null)
  └ <RightPanel diagram/>                                   features/panels/RightPanel.tsx
-      ├ tab "Step"   → StepPanel: details, "Runs only if" conditions, Customise fields (§4)
-      └ tab "Import report" → ReportPanel: stats, sheets, warnings → "Show step" → store.select(stepId)
+      ├ tab "Step"   → StepPanel: details (restriction, alternate, routing, run-as, validations,
+      │               notifications for this step), "Runs only if" conditions, Customise fields (§4)
+      ├ tab "Health" → HealthPanel: diagram.findings → "Show step" → store.select(stepId)
+      └ tab "Import report" → ReportPanel: stats, sheets, definition settings, custom notifications, warnings
 ```
 
 ## 4. Customise + undo ✅

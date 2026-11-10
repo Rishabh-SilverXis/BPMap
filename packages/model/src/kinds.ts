@@ -31,6 +31,9 @@ export function kindOf(rawType: string): StepKind {
   return TYPE_TO_KIND[key] ?? 'unknown';
 }
 
+/** Approval-type kinds: drawn navy, and get a decision diamond when conditional (DS §9). */
+export const APPROVAL_KINDS: ReadonlySet<StepKind> = new Set(['approval', 'approval-chain', 'consolidated-approval-chain']);
+
 /** Kinds that are executed by the system and live in system lanes at the bottom (VIS-01). */
 export const SYSTEM_KINDS: ReadonlySet<StepKind> = new Set(['service', 'integration']);
 

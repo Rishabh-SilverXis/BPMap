@@ -1,0 +1,1012 @@
+{
+  "id": "change-job--default-definition",
+  "process": "Change Job",
+  "variant": "Default Definition",
+  "source": {
+    "kind": "xlsx",
+    "fileName": "change-job.xlsx",
+    "contentHash": "fnv1a-1e4c05a7-12773",
+    "importedAt": "2026-11-10T00:00:00.000Z"
+  },
+  "initiatingGroups": [
+    "HR Partner",
+    "Manager",
+    "HR Administrator",
+    "Management Chain"
+  ],
+  "meta": {
+    "effectiveDate": "2026-11-10",
+    "mostRecentUsedDate": "2026-10-20",
+    "dueDate": "1 Week",
+    "autocomplete": true
+  },
+  "steps": [
+    {
+      "id": "a-initiation-initiation",
+      "order": "a",
+      "stageKey": "a__000",
+      "kind": "initiation",
+      "rawType": "Initiation",
+      "task": "",
+      "groups": [],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "validations": [
+        {
+          "text": "Job category must match the staffing model",
+          "severity": "critical"
+        },
+        {
+          "text": "Work shift is required for hourly workers",
+          "severity": "critical"
+        },
+        {
+          "text": "Location must allow the selected shift",
+          "severity": "warning"
+        }
+      ],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 10
+    },
+    {
+      "id": "ba-action-review-current-manager",
+      "order": "ba",
+      "stageKey": "ba_000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Review: Current Manager",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C1"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "routing": "Current",
+      "restriction": "Initiator, Approvers, Subject",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 11
+    },
+    {
+      "id": "bb-action-review-receiving-manager",
+      "order": "bb",
+      "stageKey": "bb_000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Review: Receiving Manager",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C2"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "alternate": "HR Business Partner (relative to excluded)",
+      "routing": "Proposed",
+      "restriction": "Initiator, Approvers, Subject",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 12
+    },
+    {
+      "id": "bc-action-review-change-job",
+      "order": "bc",
+      "stageKey": "bc_000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Review Change Job",
+      "groups": [
+        "HR Business Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C3"
+      ],
+      "dueOnEffectiveDate": false,
+      "alternate": "HR Administrator (relative to excluded)",
+      "routing": "Proposed",
+      "restriction": "Initiator, Approvers, Subject",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 13
+    },
+    {
+      "id": "bd-action-review-change-job",
+      "order": "bd",
+      "stageKey": "bd_000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Review Change Job",
+      "groups": [
+        "Compensation Administrator"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C4"
+      ],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 14
+    },
+    {
+      "id": "d-approval-approval",
+      "order": "d",
+      "stageKey": "d__000",
+      "kind": "approval",
+      "rawType": "Approval",
+      "task": "",
+      "groups": [
+        "Manager"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C5",
+        "C6"
+      ],
+      "dueOnEffectiveDate": false,
+      "alternate": "Manager (relative to excluded)",
+      "restriction": "Initiator, Approvers, Subject",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 15
+    },
+    {
+      "id": "e-approval-approval",
+      "order": "e",
+      "stageKey": "e__000",
+      "kind": "approval",
+      "rawType": "Approval",
+      "task": "",
+      "groups": [
+        "General Manager"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C5",
+        "C6",
+        "C7",
+        "C8"
+      ],
+      "dueOnEffectiveDate": false,
+      "restriction": "Initiator",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 16
+    },
+    {
+      "id": "f-approval-approval",
+      "order": "f",
+      "stageKey": "f__000",
+      "kind": "approval",
+      "rawType": "Approval",
+      "task": "",
+      "groups": [
+        "Regional Director"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C6",
+        "C3",
+        "C8"
+      ],
+      "dueOnEffectiveDate": false,
+      "restriction": "Initiator",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 17
+    },
+    {
+      "id": "i-approval-approval",
+      "order": "i",
+      "stageKey": "i__000",
+      "kind": "approval",
+      "rawType": "Approval",
+      "task": "",
+      "groups": [
+        "Chief HR Officer"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C6",
+        "C9",
+        "C10"
+      ],
+      "dueOnEffectiveDate": false,
+      "alternate": "Manager (relative to excluded)",
+      "restriction": "Subject",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 18
+    },
+    {
+      "id": "k-action-manage-union-membership",
+      "order": "k",
+      "stageKey": "k__000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Manage Union Membership",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C11"
+      ],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 19
+    },
+    {
+      "id": "k1-todo-update-union-additional-data",
+      "order": "k1",
+      "stageKey": "k__001",
+      "kind": "todo",
+      "rawType": "To Do",
+      "task": "Update Union Additional Data",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C12"
+      ],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 20
+    },
+    {
+      "id": "k2-todo-update-regional-additional-data",
+      "order": "k2",
+      "stageKey": "k__002",
+      "kind": "todo",
+      "rawType": "To Do",
+      "task": "Update Regional Additional Data",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C13"
+      ],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 21
+    },
+    {
+      "id": "m-action-change-organization-assignments",
+      "order": "m",
+      "stageKey": "m__000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Change Organization Assignments",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C14"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "restriction": "Subject",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 22
+    },
+    {
+      "id": "n-action-propose-compensation-change",
+      "order": "n",
+      "stageKey": "n__000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Propose Compensation Change",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C15"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "restriction": "Subject",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 23
+    },
+    {
+      "id": "o-action-assign-pay-group",
+      "order": "o",
+      "stageKey": "o__000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Assign Pay Group",
+      "groups": [
+        "Payroll Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C16",
+        "C17"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "restriction": "Subject",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": true,
+      "sourceRow": 24
+    },
+    {
+      "id": "p-service-automated-accrual-adjustment",
+      "order": "p",
+      "stageKey": "p__000",
+      "kind": "service",
+      "rawType": "Service",
+      "task": "Automated Accrual Adjustment",
+      "groups": [],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 25
+    },
+    {
+      "id": "q-action-manage-business-processes-for-worker",
+      "order": "q",
+      "stageKey": "q__000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Manage Business Processes for Worker",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C18",
+        "C19"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 26
+    },
+    {
+      "id": "r-action-assign-roles-change-assignments-for-worker",
+      "order": "r",
+      "stageKey": "r__000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Assign Roles - Change Assignments for Worker",
+      "groups": [
+        "HR Administrator",
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C20",
+        "C21"
+      ],
+      "dueOnEffectiveDate": false,
+      "restriction": "Subject",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 27
+    },
+    {
+      "id": "r1-action-maintain-time-off-plan-transfer-balance",
+      "order": "r1",
+      "stageKey": "r__001",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Maintain Time Off Plan Transfer Balance",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C22"
+      ],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 28
+    },
+    {
+      "id": "r2-action-update-time-off-requests",
+      "order": "r2",
+      "stageKey": "r__002",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Update Time Off Requests",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C23"
+      ],
+      "dueOnEffectiveDate": false,
+      "routing": "Proposed",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 29
+    },
+    {
+      "id": "s-action-create-subordinate",
+      "order": "s",
+      "stageKey": "s__000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Create Subordinate",
+      "groups": [
+        "HR Administrator"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C24",
+        "C25",
+        "C26"
+      ],
+      "dueOnEffectiveDate": false,
+      "restriction": "Subject",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 30
+    },
+    {
+      "id": "s1-action-change-superior-organization",
+      "order": "s1",
+      "stageKey": "s__001",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Change Superior Organization",
+      "groups": [
+        "HR Administrator"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C27",
+        "C28"
+      ],
+      "dueOnEffectiveDate": false,
+      "restriction": "Subject",
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 31
+    },
+    {
+      "id": "t-action-complete-state-and-local-withholding-elections",
+      "order": "t",
+      "stageKey": "t__000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Complete State and Local Withholding Elections",
+      "groups": [
+        "Employee As Self"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C29",
+        "C30"
+      ],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 32
+    },
+    {
+      "id": "t1-action-complete-province-tax-elections",
+      "order": "t1",
+      "stageKey": "t__001",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Complete Province Tax Elections",
+      "groups": [
+        "Employee As Self"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C31"
+      ],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 33
+    },
+    {
+      "id": "u-todo-confirm-benefits-eligibility",
+      "order": "u",
+      "stageKey": "u__000",
+      "kind": "todo",
+      "rawType": "To Do",
+      "task": "Confirm Benefits Eligibility",
+      "groups": [
+        "Benefits Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C32",
+        "C33"
+      ],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 34
+    },
+    {
+      "id": "v-action-change-benefit-elections",
+      "order": "v",
+      "stageKey": "v__000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Change Benefit Elections",
+      "groups": [
+        "Employee As Self"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C34"
+      ],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "validations": [],
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 35
+    }
+  ],
+  "conditions": [
+    {
+      "id": "C1",
+      "text": "Initiated from the transfer request task?",
+      "workdayOwned": true,
+      "stepIds": [
+        "ba-action-review-current-manager"
+      ]
+    },
+    {
+      "id": "C2",
+      "text": "Initiator differs from the processing user?",
+      "workdayOwned": true,
+      "stepIds": [
+        "bb-action-review-receiving-manager"
+      ]
+    },
+    {
+      "id": "C3",
+      "text": "Proposed pay change above 10%?",
+      "workdayOwned": false,
+      "stepIds": [
+        "bc-action-review-change-job",
+        "f-approval-approval"
+      ]
+    },
+    {
+      "id": "C4",
+      "text": "Compensation step needs review?",
+      "workdayOwned": false,
+      "stepIds": [
+        "bd-action-review-change-job"
+      ]
+    },
+    {
+      "id": "C5",
+      "text": "Job change reason needs approval?",
+      "workdayOwned": false,
+      "stepIds": [
+        "d-approval-approval",
+        "e-approval-approval"
+      ]
+    },
+    {
+      "id": "C6",
+      "text": "Not initiated from a job application?",
+      "workdayOwned": false,
+      "stepIds": [
+        "d-approval-approval",
+        "e-approval-approval",
+        "f-approval-approval",
+        "i-approval-approval"
+      ]
+    },
+    {
+      "id": "C7",
+      "text": "Proposed pay above current pay?",
+      "workdayOwned": false,
+      "stepIds": [
+        "e-approval-approval"
+      ]
+    },
+    {
+      "id": "C8",
+      "text": "Worker outside head office cost centre?",
+      "workdayOwned": false,
+      "stepIds": [
+        "e-approval-approval",
+        "f-approval-approval"
+      ]
+    },
+    {
+      "id": "C9",
+      "text": "Pay rate type is not hourly?",
+      "workdayOwned": false,
+      "stepIds": [
+        "i-approval-approval"
+      ]
+    },
+    {
+      "id": "C10",
+      "text": "Proposed pay change above 20%?",
+      "workdayOwned": false,
+      "stepIds": [
+        "i-approval-approval"
+      ]
+    },
+    {
+      "id": "C11",
+      "text": "Union location and union job profile?",
+      "workdayOwned": false,
+      "stepIds": [
+        "k-action-manage-union-membership"
+      ]
+    },
+    {
+      "id": "C12",
+      "text": "Location group A?",
+      "workdayOwned": false,
+      "stepIds": [
+        "k1-todo-update-union-additional-data"
+      ]
+    },
+    {
+      "id": "C13",
+      "text": "Location group B?",
+      "workdayOwned": false,
+      "stepIds": [
+        "k2-todo-update-regional-additional-data"
+      ]
+    },
+    {
+      "id": "C14",
+      "text": "No later organization events pending?",
+      "workdayOwned": true,
+      "stepIds": [
+        "m-action-change-organization-assignments"
+      ]
+    },
+    {
+      "id": "C15",
+      "text": "Worker is an employee?",
+      "workdayOwned": true,
+      "stepIds": [
+        "n-action-propose-compensation-change"
+      ]
+    },
+    {
+      "id": "C16",
+      "text": "Primary job with no pending pay group change?",
+      "workdayOwned": true,
+      "stepIds": [
+        "o-action-assign-pay-group"
+      ]
+    },
+    {
+      "id": "C17",
+      "text": "Company unchanged?",
+      "workdayOwned": false,
+      "stepIds": [
+        "o-action-assign-pay-group"
+      ]
+    },
+    {
+      "id": "C18",
+      "text": "Worker has cancelable events or delegations?",
+      "workdayOwned": true,
+      "stepIds": [
+        "q-action-manage-business-processes-for-worker"
+      ]
+    },
+    {
+      "id": "C19",
+      "text": "Employee is a manager?",
+      "workdayOwned": false,
+      "stepIds": [
+        "q-action-manage-business-processes-for-worker"
+      ]
+    },
+    {
+      "id": "C20",
+      "text": "Direct labour job category?",
+      "workdayOwned": false,
+      "stepIds": [
+        "r-action-assign-roles-change-assignments-for-worker"
+      ]
+    },
+    {
+      "id": "C21",
+      "text": "Worker has role-based security assignments?",
+      "workdayOwned": false,
+      "stepIds": [
+        "r-action-assign-roles-change-assignments-for-worker"
+      ]
+    },
+    {
+      "id": "C22",
+      "text": "Time off eligibility changes?",
+      "workdayOwned": true,
+      "stepIds": [
+        "r1-action-maintain-time-off-plan-transfer-balance"
+      ]
+    },
+    {
+      "id": "C23",
+      "text": "Time off requests exist?",
+      "workdayOwned": true,
+      "stepIds": [
+        "r2-action-update-time-off-requests"
+      ]
+    },
+    {
+      "id": "C24",
+      "text": "1=0?",
+      "workdayOwned": false,
+      "stepIds": [
+        "s-action-create-subordinate"
+      ]
+    },
+    {
+      "id": "C25",
+      "text": "Initiator is HR Administrator or EIB load?",
+      "workdayOwned": false,
+      "stepIds": [
+        "s-action-create-subordinate"
+      ]
+    },
+    {
+      "id": "C26",
+      "text": "Make new manager?",
+      "workdayOwned": false,
+      "stepIds": [
+        "s-action-create-subordinate"
+      ]
+    },
+    {
+      "id": "C27",
+      "text": "1 = 0?",
+      "workdayOwned": false,
+      "stepIds": [
+        "s1-action-change-superior-organization"
+      ]
+    },
+    {
+      "id": "C28",
+      "text": "Move manager team selected?",
+      "workdayOwned": true,
+      "stepIds": [
+        "s1-action-change-superior-organization"
+      ]
+    },
+    {
+      "id": "C29",
+      "text": "Country is not country X?",
+      "workdayOwned": false,
+      "stepIds": [
+        "t-action-complete-state-and-local-withholding-elections"
+      ]
+    },
+    {
+      "id": "C30",
+      "text": "Withholding elections apply?",
+      "workdayOwned": false,
+      "stepIds": [
+        "t-action-complete-state-and-local-withholding-elections"
+      ]
+    },
+    {
+      "id": "C31",
+      "text": "Country is country X?",
+      "workdayOwned": false,
+      "stepIds": [
+        "t1-action-complete-province-tax-elections"
+      ]
+    },
+    {
+      "id": "C32",
+      "text": "Pay rate type is salary?",
+      "workdayOwned": false,
+      "stepIds": [
+        "u-todo-confirm-benefits-eligibility"
+      ]
+    },
+    {
+      "id": "C33",
+      "text": "Worker in an eligible employee group?",
+      "workdayOwned": false,
+      "stepIds": [
+        "u-todo-confirm-benefits-eligibility"
+      ]
+    },
+    {
+      "id": "C34",
+      "text": "Change affects benefits?",
+      "workdayOwned": true,
+      "stepIds": [
+        "v-action-change-benefit-elections"
+      ]
+    }
+  ],
+  "notifications": [
+    {
+      "id": "N1",
+      "kind": "system",
+      "name": "System notification: step a (Initiation)",
+      "trigger": "When the step is assigned",
+      "recipients": [],
+      "disabled": false,
+      "stepOrder": "a",
+      "stepId": "a-initiation-initiation"
+    },
+    {
+      "id": "N2",
+      "kind": "system",
+      "name": "System notification: step ba (Action)",
+      "trigger": "When the step is assigned",
+      "recipients": [
+        "HR Partner"
+      ],
+      "disabled": false,
+      "stepOrder": "ba",
+      "stepId": "ba-action-review-current-manager"
+    },
+    {
+      "id": "N3",
+      "kind": "system",
+      "name": "System notification: step d (Approval)",
+      "trigger": "When the step is assigned",
+      "recipients": [
+        "Manager"
+      ],
+      "disabled": false,
+      "stepOrder": "d",
+      "stepId": "d-approval-approval"
+    },
+    {
+      "id": "N4",
+      "kind": "system",
+      "name": "System notification: step u (To Do)",
+      "trigger": "When the step is assigned",
+      "recipients": [
+        "Benefits Partner"
+      ],
+      "disabled": false,
+      "stepOrder": "u",
+      "stepId": "u-todo-confirm-benefits-eligibility"
+    },
+    {
+      "id": "N5",
+      "kind": "custom",
+      "name": "Completed notifies Manager",
+      "trigger": "Trigger on Status : Completed",
+      "recipients": [
+        "Manager"
+      ],
+      "disabled": false
+    },
+    {
+      "id": "N6",
+      "kind": "custom",
+      "name": "Exit of a - Change Job notifies Manager",
+      "trigger": "On Exit : a - Change Job",
+      "condition": "Initiator is not the manager?",
+      "recipients": [
+        "Manager"
+      ],
+      "disabled": false,
+      "stepOrder": "a",
+      "stepId": "a-initiation-initiation"
+    },
+    {
+      "id": "N7",
+      "kind": "custom",
+      "name": "Exit of o - Assign Pay Group notifies Payroll",
+      "trigger": "On Exit : o - Assign Pay Group",
+      "condition": "Pay group country changed?",
+      "recipients": [
+        "Payroll Partner",
+        "Payroll Partner Region"
+      ],
+      "disabled": true,
+      "stepOrder": "o",
+      "stepId": "o-action-assign-pay-group"
+    }
+  ],
+  "warnings": []
+}

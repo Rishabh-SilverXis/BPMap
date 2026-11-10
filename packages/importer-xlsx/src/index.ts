@@ -12,11 +12,13 @@
 import { parseDefinition, type ProcessDefinition } from '@bpmap/model';
 import { LIMITS, type Limits } from './limits.ts';
 import { readWorkbook, XlsxError } from './xlsx.ts';
-import { autoMap, bestGuessHeader, findStepsHeader, headerFingerprint, looksLikeNotifications, missingRequired, type ColumnMap, type Field } from './mapping.ts';
+import { autoMap, bestGuessHeader, findStepsHeader, headerFingerprint, looksLikeNotifications, missingRequired, sectionTitle, type ColumnMap, type Field } from './mapping.ts';
 import { normaliseSteps } from './normalise.ts';
+import { parseNotifications } from './notifications.ts';
 
 export { LIMITS } from './limits.ts';
 export { FIELDS, REQUIRED_FIELDS, autoMap, headerFingerprint, normaliseHeader, type ColumnMap, type Field } from './mapping.ts';
+export { decodeCell, excelDate } from './decode.ts';
 
 export interface ImportOptions {
   fileName?: string;
@@ -30,7 +32,9 @@ export interface ImportOptions {
 
 export interface SheetReport {
   name: string;
-  role: 'steps' | 'notifications' | 'ignored';
+  /** 'other' = a known Workday section we don't use yet (allowed actions, services, links, rules). */
+  role: 'steps' | 'notifications' | 'other' | 'ignored';
+  section?: string;
   rows: number;
 }
 
@@ -70,16 +74,22 @@ export function importWorkbook(bytes: Uint8Array, opts: ImportOptions = {}): Imp
     throw e;
   }
 
+  // Sheet roles: the section-title row first ("Business Process Steps", "Notifications"…), then
+  // header heuristics for files without titles (DEC-028).
   const reports: SheetReport[] = [];
   let stepsSheet: { idx: number; rowIndex: number; headers: string[]; map: ColumnMap } | null = null;
+  let notificationsIdx = -1;
   sheets.forEach((s, idx) => {
-    const hit = findStepsHeader(s.rows, limits.headerSearchRows);
+    const title = sectionTitle(s.rows, limits.headerSearchRows);
+    const hit = !title || title.kind === 'steps' ? findStepsHeader(s.rows, limits.headerSearchRows + (title?.rowIndex ?? 0)) : null;
     if (hit && !stepsSheet) {
       stepsSheet = { idx, rowIndex: hit.rowIndex, headers: hit.headers, map: hit.map };
       reports.push({ name: s.name, role: 'steps', rows: s.rows.length });
-    } else if (looksLikeNotifications(s.rows, limits.headerSearchRows)) {
+    } else if (title?.kind === 'notifications' || (!title && looksLikeNotifications(s.rows, limits.headerSearchRows))) {
+      if (notificationsIdx < 0) notificationsIdx = idx;
       reports.push({ name: s.name, role: 'notifications', rows: s.rows.length });
-    } else reports.push({ name: s.name, role: 'ignored', rows: s.rows.length });
+    } else if (title) reports.push({ name: s.name, role: 'other', rows: s.rows.length, section: title.kind });
+    else reports.push({ name: s.name, role: 'ignored', rows: s.rows.length });
   });
 
   // No sheet scored ≥ 4 fields: either a mapping answer was supplied, or ask for one.
@@ -119,6 +129,12 @@ export function importWorkbook(bytes: Uint8Array, opts: ImportOptions = {}): Imp
     limits,
     truncatedRows: sheet.truncatedRows,
   });
+
+  if (notificationsIdx >= 0) {
+    const { notifications, unlinked } = parseNotifications(sheets[notificationsIdx]!.rows, draft.steps);
+    draft.notifications = notifications;
+    if (unlinked) draft.warnings.push({ code: 'W-NOTIF-UNLINKED', message: `${unlinked} notification(s) refer to a step that isn't in the Steps sheet.` });
+  }
 
   const parsed = parseDefinition(draft);
   if (!parsed.ok) return { status: 'error', code: 'E-INVALID-MODEL', message: `The export was read but produced an invalid model: ${parsed.error}` };

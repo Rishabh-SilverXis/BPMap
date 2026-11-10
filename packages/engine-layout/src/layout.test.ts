@@ -53,3 +53,38 @@ describe('grid layout (VIS-01, VIS-02, VIS-05)', () => {
     expect(layout(buildGraph(r.definition))).toEqual(L);
   });
 });
+
+describe('decisions and markers on the real Workday layout (DEC-032)', () => {
+  const rr = importWorkbook(readFixture('workdayLayout'), { importedAt: 'x' });
+  if (rr.status !== 'ok') throw new Error('fixture failed to import');
+  const gg = buildGraph(rr.definition);
+  const LL = layout(gg);
+  const node = (order: string) => LL.nodes.find((n) => gg.steps[n.id]!.step.order === order)!;
+
+  it('puts a diamond in front of each conditional approval only (d, e, f, i)', () => {
+    expect(LL.diamonds.map((d) => gg.steps[d.stepId]!.step.order)).toEqual(['d', 'e', 'f', 'i']);
+    for (const d of LL.diamonds) {
+      const n = LL.nodes.find((x) => x.id === d.stepId)!;
+      const st = LL.stages[n.stageIndex]!;
+      expect(d.cx - d.r).toBeGreaterThan(st.x); // diamond sits inside its own column
+      expect(d.cx + d.r).toBeLessThan(n.x);
+    }
+  });
+
+  it('routes "No, skip" under the step and rejoins after it, never backwards', () => {
+    const d = node('d');
+    const skip = LL.edges.find((e) => e.id === `skip-${d.id}`)!;
+    expect(skip.label).toBe('No, skip');
+    expect(skip.points.at(-1)![0]).toBeGreaterThan(d.x + d.width);
+    expect(Math.max(...skip.points.map((p) => p[1]))).toBeGreaterThan(d.y + d.height);
+    const transitionIntoD = LL.edges.find((e) => e.id.startsWith('t-') && e.points.at(-1)![1] === d.y + d.height / 2)!;
+    expect(transitionIntoD.points.at(-1)![0]).toBeLessThan(d.x - 30); // enters the diamond, not the box
+  });
+
+  it('adds start and end markers and keeps ba…bd straight after a', () => {
+    expect(LL.markers.start!.cx).toBeLessThan(node('a').x);
+    expect(LL.markers.end!.cx).toBeGreaterThan(node('v').x + node('v').width);
+    expect(node('ba').x).toBeLessThan(node('d').x);
+    expect(node('bd').x).toBeLessThan(node('d').x);
+  });
+});

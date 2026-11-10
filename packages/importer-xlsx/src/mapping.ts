@@ -19,6 +19,11 @@ export const FIELDS = [
   'runAs',
   'allMustAct',
   'complete',
+  'additionalInfo',
+  'validation',
+  'dueOnEffectiveDate',
+  'doNotAdvance',
+  'subprocess',
 ] as const;
 export type Field = (typeof FIELDS)[number];
 export type ColumnMap = Partial<Record<Field, number>>;
@@ -35,11 +40,16 @@ const SYNONYMS: Record<Field, string[]> = {
   groups: ['group', 'groups', 'security group', 'security groups', 'security group(s)'],
   dueDate: ['due date', 'due'],
   alternate: ['alternate', 'alternate group', 'alternates'],
-  routing: ['routing', 'routing restriction', 'routing restrictions'],
+  routing: ['routing', 'routing modifier', 'routing restriction', 'routing restrictions'],
   restriction: ['restriction', 'restrictions'],
-  runAs: ['run as named user', 'run as'],
-  allMustAct: ['all must act', 'all assignees'],
+  runAs: ['run as user', 'run as named user', 'run as'],
+  allMustAct: ['all', 'all must act', 'all assignees'],
   complete: ['complete', 'process complete'],
+  additionalInfo: ['additional information', 'additional info'],
+  validation: ['validation', 'validations'],
+  dueOnEffectiveDate: ['due date is based on effective date', 'due date based on effective date'],
+  doNotAdvance: ['do not advance'],
+  subprocess: ['subprocess definitions', 'sub-process definitions', 'subprocess definition'],
 };
 
 export function normaliseHeader(h: string): string {
@@ -93,11 +103,36 @@ export function findStepsHeader(rows: readonly string[][], searchRows: number): 
   return best;
 }
 
-/** Notifications sheet heuristic: a header row mentioning notifications and recipients/triggers. */
+/**
+ * Every sheet of a Workday definition export carries a section-title row that names it
+ * ("Business Process Steps", "Notifications", …). Detecting by that title is far more reliable
+ * than guessing from header words (DEC-028).
+ */
+export type SheetKind = 'steps' | 'notifications' | 'allowed-actions' | 'allowed-services' | 'related-links' | 'available-rules';
+const SECTION_TITLES: Record<string, SheetKind> = {
+  'business process steps': 'steps',
+  notifications: 'notifications',
+  'allowed actions by role': 'allowed-actions',
+  'allowed services': 'allowed-services',
+  'related links': 'related-links',
+  'available rules & fields': 'available-rules',
+};
+
+export function sectionTitle(rows: readonly string[][], searchRows: number): { kind: SheetKind; rowIndex: number } | null {
+  for (let i = 0; i < Math.min(rows.length, searchRows); i++) {
+    const cells = (rows[i] ?? []).filter((c) => c.trim());
+    if (cells.length !== 1) continue; // a title row has exactly one non-empty cell
+    const kind = SECTION_TITLES[normaliseHeader(cells[0]!)];
+    if (kind) return { kind, rowIndex: i };
+  }
+  return null;
+}
+
+/** Fallback heuristic when there is no title row: short header cells mentioning notifications + recipients/triggers. */
 export function looksLikeNotifications(rows: readonly string[][], searchRows: number): boolean {
   for (let i = 0; i < Math.min(rows.length, searchRows); i++) {
-    const hs = (rows[i] ?? []).map(normaliseHeader);
-    if (hs.some((h) => h.includes('notification')) && hs.some((h) => /recipient|trigger|send/.test(h))) return true;
+    const hs = (rows[i] ?? []).map(normaliseHeader).filter((h) => h.length <= 40); // ignore long data cells
+    if (hs.some((h) => h.includes('notification')) && hs.some((h) => /recipient|trigger/.test(h))) return true;
   }
   return false;
 }

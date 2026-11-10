@@ -22,6 +22,11 @@ const FIELD_LABEL: Record<Field, string> = {
   runAs: 'Run as named user',
   allMustAct: 'All must act',
   complete: 'Process complete',
+  additionalInfo: 'Additional information',
+  validation: 'Validation',
+  dueOnEffectiveDate: 'Due date based on effective date',
+  doNotAdvance: 'Do not advance',
+  subprocess: 'Subprocess definitions',
 };
 
 export function MappingDialog() {

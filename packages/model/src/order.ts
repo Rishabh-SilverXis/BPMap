@@ -4,12 +4,13 @@
  * Workday runs a definition in order: a, then b, then c. Steps that share an order value run in
  * parallel. Suffixed values such as "f1" form their own stage between "f" and "g".
  *
- * Key format: letters left-padded with "_" to 3 chars + numeric suffix left-padded to 3 digits.
- * Because "_" (0x5F) sorts before "a" (0x61), shorter letter runs sort first, which gives
- * a … z, aa … zz (length, then alphabet), then by suffix: "__f000" < "__f001" < "__g000".
+ * Workday sorts order letters ALPHABETICALLY (DEC-026): a real Change Job export lists its rows as
+ * a, ba, bb, bc, bd, d, e … — "ba" runs after "a" and before "d", not after "z".
+ * Within the same letters, a numeric suffix sorts numerically: k < k1 < k2 < k10 < m.
  *
- * NOTE (Architecture T1): ordering beyond "z" and suffix behaviour must be confirmed against
- * the fixture corpus of real exports.
+ * Key format: letters RIGHT-padded with "_" to 3 chars + numeric suffix left-padded to 3 digits.
+ * "_" (0x5F) sorts before "a" (0x61), so "b__" < "ba_" < "bb_" < "c__" (plain alphabetical order),
+ * and "k__000" < "k__001" < "k__010" < "m__000".
  */
 import type { StageKey } from './schema.ts';
 
@@ -30,7 +31,15 @@ export function parseOrder(raw: string): ParsedOrder | null {
 export function stageKeyOf(raw: string): StageKey {
   const p = parseOrder(raw);
   if (!p) return UNPARSEABLE_STAGE_KEY;
-  return `${p.letters.padStart(3, '_')}${String(p.suffix).padStart(3, '0')}` as StageKey;
+  return `${p.letters.padEnd(3, '_')}${String(p.suffix).padStart(3, '0')}` as StageKey;
 }
 
 export const compareStageKeys = (a: StageKey, b: StageKey): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Migration for stored data (IndexedDB, .bpmap.json): stage keys written before DEC-026 used the
+ * old shortest-first format. Keys are derived data, so we simply recompute them from `order`.
+ */
+export function withFreshStageKeys<T extends { steps: { order: string; stageKey: StageKey }[] }>(def: T): T {
+  return { ...def, steps: def.steps.map((s) => ({ ...s, stageKey: stageKeyOf(s.order) })) };
+}

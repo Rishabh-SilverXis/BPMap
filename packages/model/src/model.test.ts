@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareStageKeys, kindOf, makeStepIds, parseOrder, slug, stageKeyOf, UNPARSEABLE_STAGE_KEY } from './index.ts';
+import { compareStageKeys, withFreshStageKeys, kindOf, makeStepIds, parseOrder, slug, stageKeyOf, UNPARSEABLE_STAGE_KEY } from './index.ts';
 
 describe('order → stage key (MOD-03)', () => {
   it('parses letters and numeric suffixes, case-insensitively', () => {
@@ -8,10 +8,14 @@ describe('order → stage key (MOD-03)', () => {
     expect(parseOrder('a-1')).toBeNull();
   });
 
-  it('sorts a < b < f < f1 < f2 < g < z < aa', () => {
-    const raw = ['aa', 'g', 'f2', 'a', 'z', 'f1', 'b', 'f'];
-    const sorted = [...raw].sort((x, y) => compareStageKeys(stageKeyOf(x), stageKeyOf(y)));
-    expect(sorted).toEqual(['a', 'b', 'f', 'f1', 'f2', 'g', 'z', 'aa']);
+  it('sorts alphabetically like Workday: a < ba < bb < bd < d (real Change Job export, DEC-026)', () => {
+    const raw = ['d', 'bd', 'a', 'bb', 'ba', 'e'];
+    expect([...raw].sort((x, y) => compareStageKeys(stageKeyOf(x), stageKeyOf(y)))).toEqual(['a', 'ba', 'bb', 'bd', 'd', 'e']);
+  });
+
+  it('sorts numeric suffixes numerically: k < k1 < k2 < k10 < m', () => {
+    const raw = ['k10', 'm', 'k2', 'k', 'k1', 'r2', 'r1'];
+    expect([...raw].sort((x, y) => compareStageKeys(stageKeyOf(x), stageKeyOf(y)))).toEqual(['k', 'k1', 'k2', 'k10', 'm', 'r1', 'r2']);
   });
 
   it('maps the same letter to the same stage (parallel steps)', () => {
@@ -20,7 +24,7 @@ describe('order → stage key (MOD-03)', () => {
 
   it('sends unparseable orders to the end', () => {
     expect(stageKeyOf('??')).toBe(UNPARSEABLE_STAGE_KEY);
-    expect(compareStageKeys(stageKeyOf('zz'), UNPARSEABLE_STAGE_KEY)).toBe(-1);
+    expect(compareStageKeys(stageKeyOf('zzz'), UNPARSEABLE_STAGE_KEY)).toBe(-1);
   });
 });
 
@@ -51,5 +55,12 @@ describe('kinds (MOD-05)', () => {
     expect(kindOf('To Do')).toBe('todo');
     expect(kindOf('Consolidated  Approval Chain')).toBe('consolidated-approval-chain');
     expect(kindOf('Batch')).toBe('unknown');
+  });
+});
+
+describe('stored-data migration', () => {
+  it('recomputes stage keys written in the old format', () => {
+    const old = { steps: [{ order: 'ba', stageKey: '_ba000' as never }, { order: 'd', stageKey: '__d000' as never }] };
+    expect(withFreshStageKeys(old).steps.map((s) => s.stageKey)).toEqual(['ba_000', 'd__000']);
   });
 });

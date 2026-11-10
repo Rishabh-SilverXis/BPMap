@@ -3,7 +3,7 @@
  * Increment 1 uses a small key-value table (DEC-017); everything read back passes the zod gate.
  */
 import Dexie, { type Table } from 'dexie';
-import { parseDefinition, type ProcessDefinition } from '@bpmap/model';
+import { parseDefinition, withFreshStageKeys, type ProcessDefinition } from '@bpmap/model';
 import { untracked, useStore, type ImportReport } from '../store/store.ts';
 import { isOverlay, type Overlay } from '../store/overlay.ts';
 import type { ColumnMap } from '@bpmap/importer-xlsx';
@@ -46,7 +46,7 @@ export async function hydrateFromStorage(): Promise<void> {
     const definitions: ProcessDefinition[] = [];
     for (const d of saved?.definitions ?? []) {
       const r = parseDefinition(d);
-      if (r.ok) definitions.push(r.value); // invalid entries are dropped, never loaded unchecked
+      if (r.ok) definitions.push(withFreshStageKeys(r.value)); // invalid entries are dropped, never loaded unchecked
     }
     const overlays: Record<string, Overlay> = {};
     for (const [k, v] of Object.entries(saved?.overlays ?? {})) if (isOverlay(v)) overlays[k] = v;

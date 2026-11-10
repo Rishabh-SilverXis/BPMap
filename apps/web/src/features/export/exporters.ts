@@ -3,7 +3,7 @@
  * SVG and PNG come from the same export scene the canvas draws, so they show the full diagram
  * (never the viewport, bug E4) plus legend and condition list.
  */
-import { slug, parseProject, SCHEMA_VERSION, type ProcessDefinition } from '@bpmap/model';
+import { slug, parseProject, withFreshStageKeys, SCHEMA_VERSION, type ProcessDefinition } from '@bpmap/model';
 import { toSvg, type Scene } from '@bpmap/scene';
 import { isOverlay, type Overlay } from '../../store/overlay.ts';
 
@@ -87,5 +87,5 @@ export async function readProjectFile(file: File): Promise<{ definitions: Proces
   if (!parsed.ok) throw new Error(`The project file is damaged: ${parsed.error}`);
   const overlays: Record<string, Overlay> = {};
   for (const [k, v] of Object.entries(f.overlays ?? {})) if (isOverlay(v)) overlays[k] = v;
-  return { definitions: parsed.value.definitions, overlays };
+  return { definitions: parsed.value.definitions.map(withFreshStageKeys), overlays };
 }

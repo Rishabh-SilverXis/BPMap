@@ -27,7 +27,7 @@ export type ImportState =
   | { status: 'error'; fileName?: string; message: string };
 
 export type ThemePref = 'system' | 'light' | 'dark';
-export type PanelTab = 'step' | 'report';
+export type PanelTab = 'step' | 'health' | 'report';
 
 export interface ProjectState {
   definitions: ProcessDefinition[];

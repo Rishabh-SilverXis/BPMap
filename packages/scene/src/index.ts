@@ -18,11 +18,12 @@ export { wrapText, textWidth } from './text.ts';
 export type SceneItem =
   | { t: 'rect'; x: number; y: number; w: number; h: number; r?: number; fill: string; stroke?: string; strokeWidth?: number; dash?: number[] }
   | { t: 'circle'; cx: number; cy: number; r: number; fill: string; stroke?: string; strokeWidth?: number }
+  | { t: 'poly'; points: Point[]; fill: string; stroke?: string; strokeWidth?: number }
   | { t: 'path'; points: Point[]; stroke: string; width: number; dash?: number[]; arrow?: boolean }
   | { t: 'text'; x: number; y: number; text: string; size: number; weight: number; fill: string; anchor?: 'start' | 'middle' | 'end'; mono?: boolean; letterSpacing?: number }
   | { t: 'group'; role: SceneRole; id?: string; children: SceneItem[] };
 
-export type SceneRole = 'lanes' | 'lane' | 'stage-headers' | 'bars' | 'edges' | 'step' | 'header' | 'legend' | 'conditions';
+export type SceneRole = 'lanes' | 'lane' | 'stage-headers' | 'bars' | 'edges' | 'decisions' | 'markers' | 'step' | 'header' | 'legend' | 'conditions';
 
 export interface Scene {
   width: number;
@@ -59,6 +60,17 @@ export function stepKindTag(step: Step): string {
 }
 
 const SKIP_DASH = [5, 3.5];
+const EDGE_SKIP_DASH = [5, 4];
+
+/** "C5 and C6", "C4, C8 and C9"; more than three → "4 conditions" (no ambiguous "+", DEC-032). */
+export function conditionPhrase(input: readonly string[]): string {
+  const ids = [...input].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+  if (ids.length > 3) return `${ids.length} conditions`;
+  if (ids.length <= 1) return ids[0] ?? '';
+  return `${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]}`;
+}
+
+const diamondPoints = (cx: number, cy: number, r: number): Point[] => [[cx, cy - r], [cx + r, cy], [cx, cy + r], [cx - r, cy]];
 
 /** Overlay decorations the scene draws (CUS-01): label overrides and notes, keyed by StepId. */
 export interface SceneDecor {
@@ -97,8 +109,38 @@ export function buildDiagramScene(def: ProcessDefinition, graph: SemanticGraph, 
   items.push({
     t: 'group',
     role: 'edges',
-    children: L.edges.map((e): SceneItem => ({ t: 'path', points: e.points, stroke: tk.edge, width: 1.5, arrow: e.arrow })),
+    children: L.edges.flatMap((e): SceneItem[] => {
+      const skip = e.style === 'skip';
+      const out: SceneItem[] = [{ t: 'path', points: e.points, stroke: skip ? tk.edgeSkip : tk.edge, width: 1.5, arrow: e.arrow, ...(skip ? { dash: EDGE_SKIP_DASH } : {}) }];
+      if (e.label && e.style === 'yes') {
+        const [[x1, y1], [x2]] = e.points as [Point, Point];
+        out.push({ t: 'text', x: (x1 + x2) / 2, y: y1 - 5, text: e.label, size: 9.5, weight: 600, fill: s['text-secondary'], anchor: 'middle' });
+      }
+      if (e.label && skip) {
+        // Label sits ON the line in a surface pill (DS §10.4) so it never crowds the step box.
+        const [, [bx, by], [ex]] = e.points as [Point, Point, Point, Point];
+        const w = textWidth(e.label, 9.5, 600) + 10;
+        out.push({ t: 'rect', x: (bx + ex) / 2 - w / 2, y: by - 6.5, w, h: 13, r: 6.5, fill: s.surface });
+        out.push({ t: 'text', x: (bx + ex) / 2, y: by + 3.3, text: e.label, size: 9.5, weight: 600, fill: s['on-conditional-subtle'], anchor: 'middle' });
+      }
+      return out;
+    }),
   });
+
+  items.push({
+    t: 'group',
+    role: 'decisions',
+    children: L.diamonds.flatMap((d): SceneItem[] => [
+      { t: 'poly', points: diamondPoints(d.cx, d.cy, d.r), fill: tk.conditionBadge.bg, stroke: tk.conditionalBorder, strokeWidth: 1.5 },
+      { t: 'text', x: d.cx, y: d.cy + 3.5, text: '?', size: 10, weight: 700, fill: tk.conditionBadge.text, anchor: 'middle' },
+      { t: 'text', x: d.cx, y: d.cy - d.r - 6, text: `${conditionPhrase(d.conditionIds)}?`, size: 10, weight: 700, fill: tk.conditionBadge.text, anchor: 'middle' },
+    ]),
+  });
+
+  const markers: SceneItem[] = [];
+  if (L.markers.start) markers.push({ t: 'circle', cx: L.markers.start.cx, cy: L.markers.start.cy, r: L.markers.start.r, fill: s.surface, stroke: tk.completion, strokeWidth: 2.5 });
+  if (L.markers.end) markers.push({ t: 'circle', cx: L.markers.end.cx, cy: L.markers.end.cy, r: L.markers.end.r, fill: s.surface, stroke: s.primary, strokeWidth: 4 });
+  items.push({ t: 'group', role: 'markers', children: markers });
 
   items.push({
     t: 'group',
@@ -150,6 +192,7 @@ function translate(items: SceneItem[], dx: number, dy: number): SceneItem[] {
     switch (it.t) {
       case 'rect': return { ...it, x: it.x + dx, y: it.y + dy };
       case 'circle': return { ...it, cx: it.cx + dx, cy: it.cy + dy };
+      case 'poly': return { ...it, points: it.points.map(([x, y]): Point => [x + dx, y + dy]) };
       case 'text': return { ...it, x: it.x + dx, y: it.y + dy };
       case 'path': return { ...it, points: it.points.map(([x, y]): Point => [x + dx, y + dy]) };
       case 'group': return { ...it, children: translate(it.children, dx, dy) };
@@ -203,8 +246,11 @@ export function buildExportScene(def: ProcessDefinition, graph: SemanticGraph, L
     [{ t: 'rect', x: 0, y: 0, w: 28, h: 16, r: 4, fill: tk.action.bg, stroke: tk.conditionalBorder, strokeWidth: 1.75, dash: SKIP_DASH }, 'Runs only if its condition (Cn) is true'],
     [{ t: 'rect', x: 11, y: -3, w: 6, h: 22, r: 2, fill: tk.parallelBar }, 'Steps run in parallel'],
     [{ t: 'circle', cx: 14, cy: 8, r: 8, fill: tk.completion }, 'Process is complete after this step'],
+    [{ t: 'poly', points: diamondPoints(14, 8, 9), fill: tk.conditionBadge.bg, stroke: tk.conditionalBorder, strokeWidth: 1.5 }, 'Decision: Yes runs the approval, No skips it'],
+    [{ t: 'circle', cx: 14, cy: 8, r: 7, fill: s.surface, stroke: tk.completion, strokeWidth: 2.5 }, 'Start'],
+    [{ t: 'circle', cx: 14, cy: 8, r: 7, fill: s.surface, stroke: s.primary, strokeWidth: 3.5 }, 'End of the flow'],
   ];
-  const colW = inner / 4;
+  const colW = Math.min(inner / 4, 290); // readable legend even on very wide diagrams (DEC-033)
   entries.forEach(([shape, label], i) => {
     const x = M + (i % 4) * colW;
     const yy = y + Math.floor(i / 4) * 26;
@@ -212,7 +258,7 @@ export function buildExportScene(def: ProcessDefinition, graph: SemanticGraph, L
     legend.push({ t: 'text', x: x + 38, y: yy + 12, text: label, size: 11, weight: 400, fill: s['text-secondary'] });
   });
   y += Math.ceil(entries.length / 4) * 26 + 6;
-  for (const line of wrapText(EXCEPTIONS_NOTE, inner, 11)) {
+  for (const line of wrapText(EXCEPTIONS_NOTE, Math.min(inner, 4 * colW), 11)) {
     legend.push({ t: 'text', x: M, y, text: line, size: 11, weight: 400, fill: s['text-secondary'] });
     y += 15;
   }
@@ -225,13 +271,13 @@ export function buildExportScene(def: ProcessDefinition, graph: SemanticGraph, L
     conds.push({ t: 'text', x: M, y, text: 'CONDITIONS (A STEP RUNS ONLY WHEN ITS CONDITIONS ARE TRUE)', size: 10, weight: 800, fill: s['text-muted'], letterSpacing: 1 });
     y += 16;
     const half = Math.ceil(def.conditions.length / 2);
-    const colWidth = inner / 2 - 16;
+    const colWidth = Math.min(inner / 2, 600) - 16; // fixed reading width (DEC-033)
     const visible = new Set(Object.keys(graph.steps));
     const orderOf = new Map(Object.values(graph.steps).map((g) => [g.step.id, g.step.order]));
     let colY = [y, y];
     def.conditions.forEach((c, i) => {
       const col = i < half ? 0 : 1;
-      const x = M + col * (inner / 2);
+      const x = M + col * (colWidth + 32);
       const where = [...new Set(c.stepIds.filter((id) => visible.has(id)).map((id) => orderOf.get(id)))].join(', ');
       const lines = wrapText(c.text, colWidth - 44, 11);
       conds.push({ t: 'rect', x, y: colY[col]! - 11, w: 32, h: 15, r: 7.5, fill: tk.conditionBadge.bg, stroke: tk.conditionalBorder, strokeWidth: 1 });
@@ -260,6 +306,8 @@ function itemSvg(it: SceneItem): string {
   switch (it.t) {
     case 'rect':
       return `<rect x="${n(it.x)}" y="${n(it.y)}" width="${n(it.w)}" height="${n(it.h)}"${it.r ? ` rx="${n(it.r)}"` : ''} fill="${it.fill}"${it.stroke ? ` stroke="${it.stroke}" stroke-width="${n(it.strokeWidth ?? 1)}"` : ''}${it.dash ? ` stroke-dasharray="${it.dash.join(' ')}"` : ''}/>`;
+    case 'poly':
+      return `<polygon points="${it.points.map(([x, y]) => `${n(x)},${n(y)}`).join(' ')}" fill="${it.fill}"${it.stroke ? ` stroke="${it.stroke}" stroke-width="${n(it.strokeWidth ?? 1)}"` : ''}/>`;
     case 'circle':
       return `<circle cx="${n(it.cx)}" cy="${n(it.cy)}" r="${n(it.r)}" fill="${it.fill}"${it.stroke ? ` stroke="${it.stroke}" stroke-width="${n(it.strokeWidth ?? 1)}"` : ''}/>`;
     case 'path':

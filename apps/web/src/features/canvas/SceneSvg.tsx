@@ -9,6 +9,8 @@ function Item({ it }: { it: SceneItem }) {
   switch (it.t) {
     case 'rect':
       return <rect x={it.x} y={it.y} width={it.w} height={it.h} rx={it.r} fill={it.fill} stroke={it.stroke} strokeWidth={it.strokeWidth} strokeDasharray={it.dash?.join(' ')} />;
+    case 'poly':
+      return <polygon points={it.points.map(([x, y]) => `${x},${y}`).join(' ')} fill={it.fill} stroke={it.stroke} strokeWidth={it.strokeWidth} />;
     case 'circle':
       return <circle cx={it.cx} cy={it.cy} r={it.r} fill={it.fill} stroke={it.stroke} strokeWidth={it.strokeWidth} />;
     case 'path':

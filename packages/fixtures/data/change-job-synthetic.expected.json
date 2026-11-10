@@ -5,17 +5,20 @@
   "source": {
     "kind": "xlsx",
     "fileName": "change-job.xlsx",
-    "contentHash": "fnv1a-b70a4787-9609",
+    "contentHash": "fnv1a-4d091624-9609",
     "importedAt": "2026-11-10T00:00:00.000Z"
   },
   "initiatingGroups": [
     "Initiator"
   ],
+  "meta": {
+    "effectiveDate": "01/01/2026"
+  },
   "steps": [
     {
       "id": "a-initiation-initiation",
       "order": "a",
-      "stageKey": "__a000",
+      "stageKey": "a__000",
       "kind": "initiation",
       "rawType": "Initiation",
       "task": "",
@@ -27,6 +30,7 @@
       "conditionIds": [],
       "dueOnEffectiveDate": false,
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 5
@@ -34,7 +38,7 @@
     {
       "id": "b-action-review-current-manager",
       "order": "b",
-      "stageKey": "__b000",
+      "stageKey": "b__000",
       "kind": "action",
       "rawType": "Action",
       "task": "Review: Current Manager",
@@ -51,6 +55,7 @@
       "alternate": "Alternate Approver",
       "routing": "Current manager",
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 6
@@ -58,7 +63,7 @@
     {
       "id": "c-action-review-receiving-manager",
       "order": "c",
-      "stageKey": "__c000",
+      "stageKey": "c__000",
       "kind": "action",
       "rawType": "Action",
       "task": "Review: Receiving Manager",
@@ -75,6 +80,7 @@
       "alternate": "Alternate Approver",
       "routing": "Proposed manager",
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 7
@@ -82,7 +88,7 @@
     {
       "id": "d-approval-approve",
       "order": "d",
-      "stageKey": "__d000",
+      "stageKey": "d__000",
       "kind": "approval",
       "rawType": "Approval",
       "task": "Approve",
@@ -98,6 +104,7 @@
       "dueOnEffectiveDate": false,
       "alternate": "Manager (relative to excluded)",
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 8
@@ -105,7 +112,7 @@
     {
       "id": "e-action-review-change-job",
       "order": "e",
-      "stageKey": "__e000",
+      "stageKey": "e__000",
       "kind": "action",
       "rawType": "Action",
       "task": "Review Change Job",
@@ -121,6 +128,7 @@
       "dueOnEffectiveDate": false,
       "routing": "Proposed manager",
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 9
@@ -128,7 +136,7 @@
     {
       "id": "f-action-change-organization-assignments",
       "order": "f",
-      "stageKey": "__f000",
+      "stageKey": "f__000",
       "kind": "action",
       "rawType": "Action",
       "task": "Change Organization Assignments",
@@ -143,6 +151,7 @@
       "dueDate": "2 Days",
       "dueOnEffectiveDate": false,
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 10
@@ -150,7 +159,7 @@
     {
       "id": "f1-action-assign-collective-agreement",
       "order": "f1",
-      "stageKey": "__f001",
+      "stageKey": "f__001",
       "kind": "action",
       "rawType": "Action",
       "task": "Assign Collective Agreement",
@@ -165,6 +174,7 @@
       "dueDate": "2 Days",
       "dueOnEffectiveDate": false,
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 11
@@ -172,7 +182,7 @@
     {
       "id": "g-action-propose-compensation-change",
       "order": "g",
-      "stageKey": "__g000",
+      "stageKey": "g__000",
       "kind": "action",
       "rawType": "Action",
       "task": "Propose Compensation Change",
@@ -189,6 +199,7 @@
       "alternate": "Alternate Approver",
       "routing": "Proposed manager",
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 12
@@ -196,7 +207,7 @@
     {
       "id": "h-approval-approve",
       "order": "h",
-      "stageKey": "__h000",
+      "stageKey": "h__000",
       "kind": "approval",
       "rawType": "Approval",
       "task": "Approve",
@@ -212,6 +223,7 @@
       "dueDate": "2 Days",
       "dueOnEffectiveDate": false,
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 13
@@ -219,7 +231,7 @@
     {
       "id": "i-todo-complete-offboarding-checklist",
       "order": "i",
-      "stageKey": "__i000",
+      "stageKey": "i__000",
       "kind": "todo",
       "rawType": "To Do",
       "task": "Complete Offboarding Checklist",
@@ -235,6 +247,7 @@
       "dueOnEffectiveDate": true,
       "routing": "Current manager",
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": true,
       "sourceRow": 14
@@ -242,7 +255,7 @@
     {
       "id": "j-todo-review-security-group-assignments",
       "order": "j",
-      "stageKey": "__j000",
+      "stageKey": "j__000",
       "kind": "todo",
       "rawType": "To Do",
       "task": "Review Security Group Assignments",
@@ -257,6 +270,7 @@
       "dueDate": "Today (from effective date)",
       "dueOnEffectiveDate": true,
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 15
@@ -264,7 +278,7 @@
     {
       "id": "j-action-update-role-assignments",
       "order": "j",
-      "stageKey": "__j000",
+      "stageKey": "j__000",
       "kind": "action",
       "rawType": "Action",
       "task": "Update Role Assignments",
@@ -280,6 +294,7 @@
       "dueOnEffectiveDate": true,
       "alternate": "Alternate Owner",
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 16
@@ -287,7 +302,7 @@
     {
       "id": "k-action-maintain-employee-contract",
       "order": "k",
-      "stageKey": "__k000",
+      "stageKey": "k__000",
       "kind": "action",
       "rawType": "Action",
       "task": "Maintain Employee Contract",
@@ -303,6 +318,7 @@
       "dueDate": "2 Days",
       "dueOnEffectiveDate": false,
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 17
@@ -310,7 +326,7 @@
     {
       "id": "k-action-assign-pay-group",
       "order": "k",
-      "stageKey": "__k000",
+      "stageKey": "k__000",
       "kind": "action",
       "rawType": "Action",
       "task": "Assign Pay Group",
@@ -328,6 +344,7 @@
       "dueOnEffectiveDate": false,
       "alternate": "Alternate Approver",
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 18
@@ -335,7 +352,7 @@
     {
       "id": "k-todo-other-onboarding-procedures",
       "order": "k",
-      "stageKey": "__k000",
+      "stageKey": "k__000",
       "kind": "todo",
       "rawType": "To Do",
       "task": "Other Onboarding Procedures",
@@ -350,6 +367,7 @@
       "dueDate": "1 Day",
       "dueOnEffectiveDate": false,
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 19
@@ -357,7 +375,7 @@
     {
       "id": "k-action-manage-business-processes-for-worker",
       "order": "k",
-      "stageKey": "__k000",
+      "stageKey": "k__000",
       "kind": "action",
       "rawType": "Action",
       "task": "Manage Business Processes for Worker",
@@ -372,6 +390,7 @@
       "dueDate": "2 Days",
       "dueOnEffectiveDate": false,
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 20
@@ -379,7 +398,7 @@
     {
       "id": "k-action-change-superior-organization",
       "order": "k",
-      "stageKey": "__k000",
+      "stageKey": "k__000",
       "kind": "action",
       "rawType": "Action",
       "task": "Change Superior Organization",
@@ -394,6 +413,7 @@
       "dueDate": "2 Days",
       "dueOnEffectiveDate": false,
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 21
@@ -401,7 +421,7 @@
     {
       "id": "k-service-remove-invalid-time-off-after-job-change",
       "order": "k",
-      "stageKey": "__k000",
+      "stageKey": "k__000",
       "kind": "service",
       "rawType": "Service",
       "task": "Remove Invalid Time Off After Job Change",
@@ -411,6 +431,7 @@
       "conditionIds": [],
       "dueOnEffectiveDate": false,
       "runsAsNamedUser": false,
+      "validations": [],
       "doNotAdvance": false,
       "complete": false,
       "sourceRow": 22

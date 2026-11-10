@@ -12,6 +12,7 @@
     "@bpmap/design-tokens": "*",
     "@bpmap/engine-graph": "*",
     "@bpmap/engine-layout": "*",
+    "@bpmap/engine-rules": "*",
     "@bpmap/importer-xlsx": "*",
     "@bpmap/model": "*",
     "@bpmap/scene": "*",

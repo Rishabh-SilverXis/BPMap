@@ -602,6 +602,7 @@ erDiagram
 | HC-13 | Initiating group can also cancel, rescind or correct (SoD) | Critical | Security policy (IMP-10) | 3 |
 | HC-14 | No completion notification to the initiator | Info | Notifications | 3 |
 | HC-15 | Condition referenced on many steps with diverging plain-word overrides | Info | Overlay | 3 |
+| HC-16 | Step can never run: its condition is constant-false (e.g. `1=0?`, a common way to switch a step off). Found in a real export. **Built in Increment 1.1** | Warning | Condition text | 1 |
 
 ## 14. Release plan & roadmap
 

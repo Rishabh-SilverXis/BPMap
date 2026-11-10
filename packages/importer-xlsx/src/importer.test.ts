@@ -83,3 +83,72 @@ describe('robustness', () => {
     expect(r).toMatchObject({ status: 'error', code: 'E-ZIP-LIMITS' });
   });
 });
+
+describe('Workday text decoding (DEC-027)', () => {
+  it('turns literal "&#xa;" into line breaks and splits on line breaks only', async () => {
+    const { decodeCell, excelDate } = await import('./index.ts');
+    const { cellLines, hasEncodingResidue } = await import('./decode.ts');
+    expect(decodeCell('A?&#xa;&#xa;B; C?')).toBe('A?\n\nB; C?');
+    expect(cellLines(decodeCell('A?&#xa;&#xa;B; C?'))).toEqual(['A?', 'B; C?']); // ";" is NOT a separator
+    expect(decodeCell('x &#10; y &amp; z')).toBe('x \n y & z');
+    expect(hasEncodingResidue(decodeCell('&amp;#xa;'))).toBe(true); // double-encoded → flagged, not guessed
+    expect(excelDate('46336.0')).toBe('2026-11-10');
+    expect(excelDate('1 Week')).toBe('1 Week');
+  });
+});
+
+describe('importWorkbook: anonymised real Workday layout (DEC-026..030)', () => {
+  const r = ok(importWorkbook(readFixture('workdayLayout'), { fileName: 'change-job.xlsx', importedAt: AT }));
+  const def = r.definition;
+  const step = (o: string) => def.steps.find((s) => s.order === o)!;
+
+  it('identifies sheets by their title row; a long field list mentioning notifications is not a notifications sheet', () => {
+    expect(r.sheets.map((s) => [s.name, s.role])).toEqual([
+      ['Business Process Steps', 'steps'],
+      ['Notifications', 'notifications'],
+      ['Allowed Actions by Role', 'other'],
+      ['Available Rules & Fields', 'other'],
+    ]);
+    expect(Object.keys(r.mappingUsed.map)).toHaveLength(17); // every column of the real export
+  });
+
+  it('keeps Workday row order: ba…bd run right after a (alphabetical order letters)', () => {
+    const order = def.steps.map((s) => s.order);
+    expect([...order].sort((x, y) => (step(x).stageKey < step(y).stageKey ? -1 : 1))).toEqual(order);
+    expect(order.slice(0, 6)).toEqual(['a', 'ba', 'bb', 'bc', 'bd', 'd']);
+    expect(def.warnings.map((w) => w.code)).not.toContain('W-ORDER-MISMATCH');
+  });
+
+  it('decodes "&#xa;" so conditions, ownership and groups are exact (no phantom C2, no phantom lane)', () => {
+    expect(r.stats).toMatchObject({ steps: 26, stages: 26, conditions: 34, conditionalSteps: 24, securityGroups: 11, warnings: 0 });
+    expect(def.conditions.every((c) => !c.text.includes('&#'))).toBe(true);
+    expect(def.conditions.filter((c) => c.workdayOwned)).toHaveLength(10);
+    expect(def.conditions.find((c) => c.text === 'Not initiated from a job application?')!.stepIds).toHaveLength(4);
+    expect(step('r').groups).toEqual(['HR Administrator', 'HR Partner']);
+    expect(step('o').conditionIds).toHaveLength(2);
+  });
+
+  it('reads Additional Information, Routing Modifier, Validation and Complete', () => {
+    expect(step('bb')).toMatchObject({ restriction: 'Initiator, Approvers, Subject', alternate: 'HR Business Partner (relative to excluded)', routing: 'Proposed', dueDate: '2 Days' });
+    expect(step('a').validations.map((v) => v.severity)).toEqual(['critical', 'critical', 'warning']);
+    expect(step('a').validations[0]!.text).toBe('Job category must match the staffing model');
+    expect(step('o').complete).toBe(true);
+  });
+
+  it('reads the definition settings above the table', () => {
+    expect([def.process, def.variant]).toEqual(['Change Job', 'Default Definition']);
+    expect(def.meta).toEqual({ effectiveDate: '2026-11-10', mostRecentUsedDate: '2026-10-20', dueDate: '1 Week', autocomplete: true });
+    expect(def.initiatingGroups).toEqual(['HR Partner', 'Manager', 'HR Administrator', 'Management Chain']);
+  });
+
+  it('parses system and custom notifications and links them to steps (MOD-09)', () => {
+    expect(def.notifications.filter((n) => n.kind === 'system')).toHaveLength(4);
+    const exitO = def.notifications.find((n) => n.name.startsWith('Exit of o'))!;
+    expect(exitO).toMatchObject({ kind: 'custom', stepOrder: 'o', stepId: step('o').id, condition: 'Pay group country changed?', disabled: true, recipients: ['Payroll Partner', 'Payroll Partner Region'] });
+    expect(def.notifications.find((n) => n.name === 'Completed notifies Manager')!.stepId).toBeUndefined();
+  });
+
+  it('matches the golden model snapshot', async () => {
+    await expect(JSON.stringify(def, null, 2)).toMatchFileSnapshot('../../fixtures/data/change-job-workday-layout.expected.json');
+  });
+});

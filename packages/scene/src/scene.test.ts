@@ -51,3 +51,13 @@ describe('scene + SVG export (EXP-01, VIS-03, VIS-06)', () => {
     expect(lines[1]!.endsWith('…')).toBe(true);
   });
 });
+
+describe('decision labels (DEC-032)', () => {
+  it('reads as plain words, not "+"', async () => {
+    const { conditionPhrase } = await import('./index.ts');
+    expect(conditionPhrase(['C5', 'C6'])).toBe('C5 and C6');
+    expect(conditionPhrase(['C4', 'C8', 'C9'])).toBe('C4, C8 and C9');
+    expect(conditionPhrase(['C6', 'C3', 'C8'])).toBe('C3, C6 and C8'); // numeric, not row order
+    expect(conditionPhrase(['C1', 'C2', 'C3', 'C4'])).toBe('4 conditions');
+  });
+});

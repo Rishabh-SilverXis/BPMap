@@ -1,9 +1,9 @@
 /**
- * Right panel (Design System §8.1, §9.3). Increment 1 tabs: Step (details + overlay edits,
- * CUS-01) and Import report (IMP-05). Health, Scenario and Customise arrive in Phase 2 (DEC-021).
+ * Right panel (Design System §8.1, §9.3). Tabs: Step (details + overlay edits, CUS-01), Health
+ * (rules engine findings, HLT-01/02) and Import report (IMP-05). Scenario and Customise arrive in Phase 2.
  */
 import { useId, type KeyboardEvent, type ReactNode } from 'react';
-import { MousePointerClick, TriangleAlert, Info } from 'lucide-react';
+import { MousePointerClick, TriangleAlert, Info, OctagonAlert, CircleCheck, Bell } from 'lucide-react';
 import clsx from 'clsx';
 import { KIND_LABEL } from '@bpmap/model';
 import { stepTitle } from '@bpmap/scene';
@@ -12,6 +12,7 @@ import { useStore, type PanelTab } from '../../store/store.ts';
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: 'step', label: 'Step' },
+  { id: 'health', label: 'Health' },
   { id: 'report', label: 'Import report' },
 ];
 
@@ -44,12 +45,13 @@ export function RightPanel({ diagram }: { diagram: Diagram }) {
             className={clsx('-mb-px border-b-2 px-2 py-2.5 text-sm font-medium', panel === t.id ? 'border-accent text-text' : 'border-transparent text-text-secondary hover:text-text')}
           >
             {t.label}
+            {t.id === 'health' && diagram.findings.length > 0 && <span className="ml-1.5 rounded-full bg-[#FEF3C7] px-1.5 text-[11px] font-bold text-[#92400E]">{diagram.findings.length}</span>}
             {t.id === 'report' && warnings > 0 && <span className="ml-1.5 rounded-full bg-[#FEF3C7] px-1.5 text-[11px] font-bold text-[#92400E]">{warnings}</span>}
           </button>
         ))}
       </div>
       <div role="tabpanel" id={`${base}-${panel}-panel`} aria-labelledby={`${base}-${panel}`} className="flex-1 overflow-auto p-4">
-        {panel === 'step' ? <StepPanel diagram={diagram} /> : <ReportPanel diagram={diagram} />}
+        {panel === 'step' ? <StepPanel diagram={diagram} /> : panel === 'health' ? <HealthPanel diagram={diagram} /> : <ReportPanel diagram={diagram} />}
       </div>
     </aside>
   );
@@ -82,6 +84,7 @@ function StepPanel({ diagram }: { diagram: Diagram }) {
     );
   }
   const conds = step.conditionIds.map((id) => diagram.def.conditions.find((c) => c.id === id)!).filter(Boolean);
+  const stepNotifications = diagram.def.notifications.filter((n) => n.stepId === step.id);
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -94,14 +97,53 @@ function StepPanel({ diagram }: { diagram: Diagram }) {
         <Row k="Order">{step.order}</Row>
         <Row k="Type">{step.rawType || KIND_LABEL[step.kind]}</Row>
         {step.task && <Row k="Workday task">{step.task}</Row>}
-        <Row k="Security group">{step.groups.length ? step.groups.join(', ') : <span className="text-text-muted">System</span>}</Row>
+        {step.kind === 'initiation' && !step.groups.length ? (
+          <Row k="Who can start">{diagram.def.initiatingGroups.length ? diagram.def.initiatingGroups.join(', ') : <span className="text-text-muted">Not in the export</span>}</Row>
+        ) : (
+          <Row k="Security group">{step.groups.length ? step.groups[0] : <span className="text-text-muted">Workday (automatic)</span>}</Row>
+        )}
         <Row k="Optional">{step.optional ? 'Yes' : 'No'}</Row>
         {step.dueDate && <Row k="Due">{step.dueDate}</Row>}
         {step.alternate && <Row k="Alternate">{step.alternate}</Row>}
         {step.routing && <Row k="Routing">{step.routing}</Row>}
         {step.restriction && <Row k="Restriction">{step.restriction}</Row>}
+        {step.dueOnEffectiveDate && <Row k="Due based on">Effective date</Row>}
+        {step.runAs && <Row k="Run as">{step.runAs}</Row>}
+        {step.doNotAdvance && <Row k="Advance">Does not advance automatically</Row>}
+        {step.groups.length > 1 && <Row k="Also">{step.groups.slice(1).join(', ')}</Row>}
+        {step.additionalInfo && <Row k="Other settings">{step.additionalInfo}</Row>}
         {step.complete && <Row k="Completion">Process is complete after this step</Row>}
       </dl>
+      {step.validations.length > 0 && (
+        <section>
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">Validations ({step.validations.length})</h3>
+          <ul className="mt-2 flex flex-col gap-1.5 text-[13px]">
+            {step.validations.map((v, i) => (
+              <li key={i} className="flex gap-2">
+                <span className={clsx('h-fit rounded-full px-1.5 text-[10px] font-bold uppercase', v.severity === 'critical' ? 'bg-[#FEE2E2] text-[#991B1B]' : 'bg-[#FEF3C7] text-[#92400E]')}>{v.severity}</span>
+                <span>{v.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {stepNotifications.length > 0 && (
+        <section>
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">Notifications ({stepNotifications.length})</h3>
+          <ul className="mt-2 flex flex-col gap-1.5 text-[13px]">
+            {stepNotifications.map((n) => (
+              <li key={n.id} className="flex gap-2">
+                <Bell className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden />
+                <span>
+                  {n.kind === 'custom' ? n.name : `Assignment notification to ${n.recipients.join(', ') || 'the assignee'}`}
+                  {n.condition && <span className="block text-xs text-text-muted">only if {n.condition}</span>}
+                  {n.disabled && <span className="block text-xs text-warning">Disabled</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {conds.length > 0 && (
         <section>
           <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">Runs only if</h3>
@@ -188,6 +230,7 @@ function ReportPanel({ diagram }: { diagram: Diagram }) {
             {report.stats.conditions} on {report.stats.conditionalSteps} steps
           </Row>
           <Row k="Groups">{report.stats.securityGroups}</Row>
+          <Row k="Notifications">{diagram.def.notifications.length}</Row>
           <Row k="Columns">{report.mappingSource === 'auto' ? 'Matched automatically' : report.mappingSource === 'profile' ? 'Saved mapping' : 'Mapped by you'}</Row>
           <Row k="Sheets">
             <ul>
@@ -195,7 +238,7 @@ function ReportPanel({ diagram }: { diagram: Diagram }) {
                 <li key={s.name}>
                   {s.name}:{' '}
                   <span className="text-text-muted">
-                    {s.role === 'steps' ? 'steps' : s.role === 'notifications' ? 'notifications (shown from Phase 2)' : 'not used'}
+                    {s.role === 'steps' ? 'steps' : s.role === 'notifications' ? 'notifications' : s.role === 'other' ? 'recognised, used in a later phase' : 'not used'}
                   </span>
                 </li>
               ))}
@@ -205,6 +248,7 @@ function ReportPanel({ diagram }: { diagram: Diagram }) {
       ) : (
         <p className="text-text-secondary">Loaded from a project file. The original import report isn’t available.</p>
       )}
+      <DefinitionSettings diagram={diagram} />
       <section>
         <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">Warnings</h3>
         {w.length === 0 ? (
@@ -234,5 +278,71 @@ function ReportPanel({ diagram }: { diagram: Diagram }) {
         )}
       </section>
     </div>
+  );
+}
+
+function DefinitionSettings({ diagram }: { diagram: Diagram }) {
+  const { meta, initiatingGroups, notifications } = diagram.def;
+  const custom = notifications.filter((n) => n.kind === 'custom');
+  if (!meta.effectiveDate && !meta.dueDate && !initiatingGroups.length && !custom.length) return null;
+  return (
+    <section>
+      <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">Definition settings</h3>
+      <dl className="mt-1">
+        {meta.effectiveDate && <Row k="Effective">{meta.effectiveDate}</Row>}
+        {meta.dueDate && <Row k="Overall due">{meta.dueDate}</Row>}
+        {meta.autocomplete !== undefined && <Row k="Autocomplete">{meta.autocomplete ? 'Enabled' : 'Off'}</Row>}
+        {initiatingGroups.length > 0 && <Row k="Who can start">{initiatingGroups.join(', ')}</Row>}
+      </dl>
+      {custom.length > 0 && (
+        <>
+          <h3 className="mt-3 text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">Custom notifications ({custom.length})</h3>
+          <ul className="mt-2 flex flex-col gap-2">
+            {custom.map((n) => (
+              <li key={n.id} className="rounded-[var(--radius-sm)] bg-surface-sunken p-2">
+                <p className="font-medium">
+                  {n.name}
+                  {n.disabled && <span className="ml-1 text-xs font-normal text-warning">(disabled)</span>}
+                </p>
+                <p className="text-xs text-text-muted">
+                  {n.trigger}
+                  {n.condition ? ` · only if ${n.condition}` : ''} · to {n.recipients.join(', ') || '—'}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Health findings (Design System §9.7). Severity = coloured rule + icon + label, never colour alone. */
+function HealthPanel({ diagram }: { diagram: Diagram }) {
+  const select = useStore((s) => s.select);
+  const f = diagram.findings;
+  if (!f.length)
+    return (
+      <p className="flex items-center gap-2 py-6 text-[13px] text-text-secondary">
+        <CircleCheck className="h-4 w-4 text-success" aria-hidden /> No issues found by the current checks.
+      </p>
+    );
+  return (
+    <ul className="flex flex-col gap-3 text-[13px]">
+      {f.map((x) => (
+        <li key={x.fingerprint} className={clsx('rounded-[var(--radius-md)] border border-border border-l-4 bg-surface p-3', x.severity === 'critical' ? 'border-l-danger' : x.severity === 'warning' ? 'border-l-warning' : 'border-l-info')}>
+          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-text-muted">
+            {x.severity === 'critical' ? <OctagonAlert className="h-3.5 w-3.5 text-danger" aria-hidden /> : <TriangleAlert className="h-3.5 w-3.5 text-warning" aria-hidden />}
+            {x.severity} · {x.ruleId}
+          </p>
+          <p className="mt-1 font-semibold">{x.title}</p>
+          <p className="mt-1 text-text-secondary">{x.message}</p>
+          {x.suggestedFix && <p className="mt-1 text-text-secondary">Suggested fix: {x.suggestedFix}</p>}
+          <button type="button" onClick={() => select(x.stepIds[0]!)} className="mt-2 text-xs font-semibold text-action hover:underline">
+            Show step
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }

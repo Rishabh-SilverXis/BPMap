@@ -1,0 +1,17 @@
+{
+  "name": "@bpmap/engine-rules",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Health & controls rules engine (Architecture §11)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@bpmap/model": "*"
+  },
+  "devDependencies": {
+    "@bpmap/fixtures": "*",
+    "@bpmap/importer-xlsx": "*"
+  }
+}

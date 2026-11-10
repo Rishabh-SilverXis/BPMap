@@ -185,3 +185,66 @@ Related: [PRD](PRD_BPMap_for_Workday.md) · [Design System](DESIGN_SYSTEM.md) ·
 - **Decision:** `.claude/launch.json` runs `/usr/local/bin/node node_modules/vite/bin/vite.js apps/web`. The dev script binds to the default `localhost` (`--strictPort`).
 - **Why:** Starting the server from the browser pane with `npm` produced no process and no logs, probably because `npm`/`node` aren't on that launcher's PATH. Running `npm run dev` from the shell works.
 - **Consequences:** Run `npm run dev` from a terminal and open http://localhost:5173.
+
+---
+
+# Increment 1.1: fixes from the first real Workday export (2026-11-11)
+
+Source: a real *Change Job (Default Definition)* export (26 steps, 6 sheets), compared with the Incubane BP Visualizer's output for the same file. The file stays **out of git** (it contains company-specific names); it's kept locally in the git-ignored `.local/` folder for manual checks. An anonymised mirror is the new golden fixture (DEC-030).
+
+## DEC-026 · Order letters sort alphabetically (corrects Architecture §7.4)
+- **Decision:** `stageKeyOf` pads letters on the **right** (`"ba" → "ba_"`), so stage keys sort alphabetically: `a < ba < bb < bd < d`. Numeric suffixes still sort numerically (`k < k1 < k2 < k10 < m`). The importer adds `W-ORDER-MISMATCH` if the export's row order ever disagrees with this sort. Stored definitions get their stage keys recomputed on load (`withFreshStageKeys`), because keys written before this change used the old format.
+- **Why:** The real export lists its rows as `a, ba, bb, bc, bd, d, e …`, and the Notifications sheet repeats that order, so Workday runs the `b*` reviews straight after initiation. Our previous rule (shorter letter runs first: `a…z`, then `aa…`) was a guess written into the architecture. It put `ba` to `bd` at the very end, **after** the process-complete step. Incubane's tool makes exactly the same mistake on this file.
+- **Alternatives:** Use the file's row order as the stage order. Rejected as the primary rule because the renamed/shuffled fixture shows rows can be out of order; the order letters are the semantic source, and the row order is now a cross-check.
+- **Consequences:** Architecture §7.4 is corrected. The old synthetic golden snapshot changed only in its `stageKey` strings.
+
+## DEC-027 · Decode Workday's literal `&#xa;` before splitting; never split on `;`
+- **Decision:**
+  - `decodeCell` turns numeric entities (`&#xa;`, `&#10;`) and basic named entities into characters, and normalises line endings.
+  - `cellLines` then splits on line breaks **only**.
+  - Any entity left after decoding (double-encoding) raises `W-ENCODING` rather than being guessed at.
+- **Why:** The real export writes in-cell line breaks as the literal text `&#xa;` (in the XML, `&amp;#xa;`), with list items separated by `&#xa;&#xa;`. Our old splitter also split on `;`, and `&#xa;` *ends* in `;`, so every multi-value cell broke apart. The effects:
+  - a phantom condition `C2 = "&#xa"` attached to 11 steps;
+  - stray `&#xa` text on 15 conditions;
+  - two Workday-owned conditions labelled Custom;
+  - duplicate conditions (37 instead of 34);
+  - a phantom lane `"HR Administrator&#xa"`.
+
+  And the import report said "no warnings".
+- **Consequences:** Groups are no longer split on `;` either. A group name containing `;` stays intact.
+
+## DEC-028 · Identify sheets by their section-title row
+- **Decision:** Every sheet of the export has a one-cell title row ("Business Process Steps", "Notifications", "Allowed Actions by Role", "Allowed Services", "Related Links", "Available Rules & Fields"). The title decides the sheet's role, and header heuristics are only a fallback for files without titles. Recognised-but-unused sections are reported as "recognised, used in a later phase".
+- **Why:** The old header heuristic marked the real Notifications sheet as *ignored* (its header row doesn't contain the word "notification") and the "Available Rules & Fields" sheet as *notifications* (a long data cell happened to mention notifications and recipients). The fallback heuristic now also ignores cells longer than 40 characters.
+
+## DEC-029 · Parse notifications (MOD-09 brought forward) and read all 17 step columns
+- **Decision:**
+  - The importer now maps every column of the real Steps sheet: `Additional Information` (split into `restriction`, `alternate` and other text), `Routing Modifier`, `All`, `Run As User`, `Validation` (with severity), `Due Date Is Based On Effective Date`, `Do Not Advance`, `Subprocess Definitions`.
+  - It also reads the definition settings above the table: effective date (Excel serial → ISO), most recent used date, overall due date, autocomplete, and **Initiating Security Groups**.
+  - It parses the Notifications sheet's *System* and *Custom* tables. Notifications are linked to steps by order (`On Exit : o - …` → step `o`).
+- **Why:** These fields were the Configurator-level detail the real file contained, but they were silently dropped (9 of 17 columns mapped, `initiatingGroups=[]`). Now that a real layout is known, parsing notifications is no longer speculation. DEC-009 deferred it only because the format was unknown.
+- **Schema:** `Step` gains `validations` (default `[]`), `runAs` and `additionalInfo`. `ProcessDefinition` gains `meta` (default `{}`). `Notification` is reshaped (`kind`, `name`, `condition`, `disabled`, `stepOrder`). `SCHEMA_VERSION` stays 1 because every new field has a default, so older saved data still validates.
+
+## DEC-030 · Anonymised mirror of the real export as a golden fixture
+- **Decision:** `change-job-workday-layout.xlsx` is generated by the fixture script. It has the same sheets, title rows, preamble, all 17 columns, the literal `&#xa;` encoding, and the same order values (`a, ba…bd, d … v`). Conditions, groups and company wording are invented, and it includes `1=0?`-style conditions and a disabled custom notification. The real file is never committed.
+- **Why:** The fixture policy (Architecture §21) requires anonymised fixtures. A mirror keeps every structural property that caused a bug, so each fix has a regression test.
+
+## DEC-031 · First health rule: HC-16 "step can never run"
+- **Decision:** New package `@bpmap/engine-rules` with the Architecture §11 shape (rules → findings with stable fingerprints). The first rule, **HC-16**, flags steps whose condition name is constant-false (`1=0?`, `1 = 0?`, `False?`, `Never?`). The web app gains a **Health** tab with finding cards (DS §9.7).
+- **Why:** In the real export, steps `s` (Create Subordinate) and `s1` (Change Superior Organization) carry `1=0?`. That's a common Workday trick for switching a step off without deleting it, but both tools drew them as ordinary conditional steps, which misleads readers and testers.
+- **Consequences:** HC-16 is added to the PRD rule catalogue (Markdown; the PDF is regenerated with the next PRD revision). Detection works on the condition *name*, because the export doesn't contain the rule logic. Rules HC-01 to HC-15 follow in Phase 2.
+
+## DEC-032 · Decision diamonds on conditional approvals; start/end markers
+- **Decision:**
+  - Every conditional **approval** gets a decision diamond in a 96 px slot in front of it, with "Yes" into the step and a dashed amber **"No, skip"** path that runs under the step and rejoins after it. The diamond label reads in words, with IDs sorted: "C5 and C6?", "C3, C6 and C8?", or "4 conditions?" for more than three. Never "C5+C6".
+  - The flow gets a start marker (green ring) and an end marker (navy ring).
+  - Non-approval conditional steps keep the dashed outline and badges only (DS §9).
+- **Why:**
+  - This implements the Design System default that Increment 1 had deferred (DEC-013).
+  - Incubane's "C5+C6?" labels are ambiguous (AND or OR?), and it also draws diamonds on some action steps, which contradicts its own rule.
+  - The skip path rejoins *after* the step and never points backwards. The scene test "no backwards arrows" still holds.
+- **Consequences:** The diamond slot widens only the columns that need it. The "No, skip" label sits on the line inside a surface-coloured pill (DS §10.4), after a browser check showed it crowding the step box.
+
+## DEC-033 · Legend and condition list keep a fixed reading width
+- **Decision:** Legend columns are capped at 290 px, and condition-list columns at 600 px, whatever the diagram's width.
+- **Why:** The legend's columns were a quarter of the diagram's width, which spread the items across a 26-stage diagram about 4,000 px wide. The user's screenshot showed "Action or review" thousands of pixels from "Approval".

@@ -38,6 +38,8 @@ export const WARNING_CODES = [
   'W-SUBPROCESS-UNRESOLVED',
   'W-NOTIF-UNLINKED',
   'W-PROCESS-NAME-GUESSED',
+  'W-ENCODING',
+  'W-ORDER-MISMATCH',
 ] as const;
 export const WarningCodeSchema = z.enum(WARNING_CODES);
 export type WarningCode = z.infer<typeof WarningCodeSchema>;
@@ -48,6 +50,12 @@ export const StageKeySchema = z.string().regex(/^[_a-z]{3}\d{3}$/).brand<'StageK
 export type StageKey = z.infer<typeof StageKeySchema>;
 export const ConditionIdSchema = z.string().regex(/^C\d+$/);
 export type ConditionId = z.infer<typeof ConditionIdSchema>;
+
+export const ValidationSchema = z.object({
+  text: z.string().min(1),
+  severity: z.enum(['critical', 'warning', 'info']),
+});
+export type Validation = z.infer<typeof ValidationSchema>;
 
 export const StepSchema = z.object({
   id: StepIdSchema,
@@ -65,7 +73,12 @@ export const StepSchema = z.object({
   alternate: z.string().optional(),
   routing: z.string().optional(),
   restriction: z.string().optional(),
+  /** Lines of "Additional Information" that are not Restriction/Alternate. */
+  additionalInfo: z.string().optional(),
   runsAsNamedUser: z.boolean(),
+  runAs: z.string().optional(),
+  /** Validations configured on the step (Workday shows them on the initiation step). */
+  validations: z.array(ValidationSchema).default([]),
   doNotAdvance: z.boolean(),
   complete: z.boolean(),
   subProcessRef: z.object({ process: z.string(), definitionId: z.string().optional() }).optional(),
@@ -84,9 +97,14 @@ export type Condition = z.infer<typeof ConditionSchema>;
 
 export const NotificationSchema = z.object({
   id: z.string(),
+  kind: z.enum(['system', 'custom']),
+  name: z.string(),
   trigger: z.string(),
+  condition: z.string().optional(),
   recipients: z.array(z.string()),
-  isCustom: z.boolean(),
+  disabled: z.boolean(),
+  /** Order value of the step the notification is attached to, if any ("o" in "On Exit : o - …"). */
+  stepOrder: z.string().optional(),
   stepId: StepIdSchema.optional(),
 });
 export type Notification = z.infer<typeof NotificationSchema>;
@@ -112,6 +130,15 @@ export const ProcessDefinitionSchema = z.object({
   variant: z.string(),
   source: DefinitionSourceSchema,
   initiatingGroups: z.array(z.string()),
+  /** Definition-level settings from the rows above the steps table. */
+  meta: z
+    .object({
+      effectiveDate: z.string().optional(),
+      mostRecentUsedDate: z.string().optional(),
+      dueDate: z.string().optional(),
+      autocomplete: z.boolean().optional(),
+    })
+    .default({}),
   steps: z.array(StepSchema),
   conditions: z.array(ConditionSchema),
   notifications: z.array(NotificationSchema),

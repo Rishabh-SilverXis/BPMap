@@ -84,5 +84,90 @@ await writeBook('unknown-layout.xlsx', (wb) => {
   ws.addRow(['b', 'Approval', 'Approve', 'Manager', '']);
 });
 
+// 4. ANONYMISED mirror of a real "Edit Business Process Definition" export (DEC-030).
+//    Same sheets, title rows, 17 step columns, preamble rows, and the literal "&#xa;" line-break
+//    encoding Workday writes inside cells. Order values match the real file (a, ba…bd, d, e, …),
+//    which is what proves alphabetical stage order. Condition, group and company wording is invented.
+{
+  const BR = '&#xa;'; // Workday writes line breaks as this literal text
+  const LIST = BR + BR; // list items are separated by two of them
+  const P2 = 'Change Job (Default Definition)';
+  const preamble = (ws) => {
+    ws.addRow([`Edit Business Process Definition: ${P2}`]);
+    ws.addRow(['Effective Date', 46336]);
+    ws.addRow(['Most Recent Used Date', 46315]);
+    ws.addRow(['Due Date', '1 Week']);
+    ws.addRow(['Enable Autocomplete', 'Yes']);
+    ws.addRow(['Security Group Restrictions']);
+    ws.addRow(['Initiating Security Groups', ['HR Partner', 'Manager', 'HR Administrator', 'Management Chain'].join(LIST)]);
+  };
+  const WD = ' (Workday Owned)';
+  const R = (o, type, specify, groups, conds, info = [], routing = '', due = '', complete = '', validation = []) => ({ o, type, specify, groups, conds, info, routing, due, complete, validation });
+  const NOT_APP = 'Not initiated from a job application?';
+  const REASON = 'Job change reason needs approval?';
+  const PAY10 = 'Proposed pay change above 10%?';
+  const HQ = 'Worker outside head office cost centre?';
+  const RESTRICT = 'Restriction: Initiator, Approvers, Subject';
+  const ROWS = [
+    R('a', 'Initiation', '', [], [], [], '', '', '', ['Job category must match the staffing model (Critical)', 'Work shift is required for hourly workers (Critical)', 'Location must allow the selected shift (Warning)']),
+    R('ba', 'Action', 'Review: Current Manager', ['HR Partner'], ['Initiated from the transfer request task?' + WD], [RESTRICT], 'Current', '2 Days'),
+    R('bb', 'Action', 'Review: Receiving Manager', ['HR Partner'], ['Initiator differs from the processing user?' + WD], [RESTRICT, 'Alternate: HR Business Partner (relative to excluded)'], 'Proposed', '2 Days'),
+    R('bc', 'Action', 'Review Change Job', ['HR Business Partner'], [PAY10], [RESTRICT, 'Alternate: HR Administrator (relative to excluded)'], 'Proposed'),
+    R('bd', 'Action', 'Review Change Job', ['Compensation Administrator'], ['Compensation step needs review?']),
+    R('d', 'Approval', '', ['Manager'], [REASON, NOT_APP], [RESTRICT, 'Alternate: Manager (relative to excluded)']),
+    R('e', 'Approval', '', ['General Manager'], [REASON, NOT_APP, 'Proposed pay above current pay?', HQ], ['Restriction: Initiator']),
+    R('f', 'Approval', '', ['Regional Director'], [NOT_APP, PAY10, HQ], ['Restriction: Initiator']),
+    R('i', 'Approval', '', ['Chief HR Officer'], [NOT_APP, 'Pay rate type is not hourly?', 'Proposed pay change above 20%?'], ['Restriction: Subject', 'Alternate: Manager (relative to excluded)']),
+    R('k', 'Action', 'Manage Union Membership', ['HR Partner'], ['Union location and union job profile?']),
+    R('k1', 'To Do', 'Update Union Additional Data', ['HR Partner'], ['Location group A?']),
+    R('k2', 'To Do', 'Update Regional Additional Data', ['HR Partner'], ['Location group B?']),
+    R('m', 'Action', 'Change Organization Assignments', ['HR Partner'], ['No later organization events pending?' + WD], ['Restriction: Subject'], '', '2 Days'),
+    R('n', 'Action', 'Propose Compensation Change', ['HR Partner'], ['Worker is an employee?' + WD], ['Restriction: Subject'], '', '2 Days'),
+    R('o', 'Action', 'Assign Pay Group', ['Payroll Partner'], ['Primary job with no pending pay group change?' + WD, 'Company unchanged?'], ['Restriction: Subject'], '', '2 Days', 'Yes'),
+    R('p', 'Service', 'Automated Accrual Adjustment', [], []),
+    R('q', 'Action', 'Manage Business Processes for Worker', ['HR Partner'], ['Worker has cancelable events or delegations?' + WD, 'Employee is a manager?'], [], '', '2 Days'),
+    R('r', 'Action', 'Assign Roles - Change Assignments for Worker', ['HR Administrator', 'HR Partner'], ['Direct labour job category?', 'Worker has role-based security assignments?'], ['Restriction: Subject']),
+    R('r1', 'Action', 'Maintain Time Off Plan Transfer Balance', ['HR Partner'], ['Time off eligibility changes?' + WD]),
+    R('r2', 'Action', 'Update Time Off Requests', ['HR Partner'], ['Time off requests exist?' + WD], [], 'Proposed'),
+    R('s', 'Action', 'Create Subordinate', ['HR Administrator'], ['1=0?', 'Initiator is HR Administrator or EIB load?', 'Make new manager?'], ['Restriction: Subject']),
+    R('s1', 'Action', 'Change Superior Organization', ['HR Administrator'], ['1 = 0?', 'Move manager team selected?' + WD], ['Restriction: Subject']),
+    R('t', 'Action', 'Complete State and Local Withholding Elections', ['Employee As Self'], ['Country is not country X?', 'Withholding elections apply?']),
+    R('t1', 'Action', 'Complete Province Tax Elections', ['Employee As Self'], ['Country is country X?']),
+    R('u', 'To Do', 'Confirm Benefits Eligibility', ['Benefits Partner'], ['Pay rate type is salary?', 'Worker in an eligible employee group?']),
+    R('v', 'Action', 'Change Benefit Elections', ['Employee As Self'], ['Change affects benefits?' + WD]),
+  ];
+  await writeBook('change-job-workday-layout.xlsx', (wb) => {
+    const ws = wb.addWorksheet('Business Process Steps');
+    preamble(ws);
+    ws.addRow(['Business Process Steps']);
+    ws.addRow(['Step', 'Order', 'If', 'Type', 'Specify', 'Optional', 'Group', 'Additional Information', 'Routing Modifier', 'All', 'Run As User', 'Validation', 'Due Date', 'Due Date Is Based On Effective Date', 'Do Not Advance', 'Complete', 'Subprocess Definitions']);
+    for (const r of ROWS) {
+      const label = `${P2} step ${r.o} - ${r.type}${r.type === 'Service' ? ` [${r.specify}]` : ''}`;
+      ws.addRow([label, r.o, r.conds.join(LIST), r.type, r.specify, 'No', r.groups.join(LIST), r.info.join(BR), r.routing, '', '', r.validation.join(LIST), r.due, '', 'No', r.complete, '']);
+    }
+    const n = wb.addWorksheet('Notifications');
+    preamble(n);
+    n.addRow(['Notifications']);
+    n.addRow(['System Notifications']);
+    n.addRow(['Disabled', 'Manual Advance System Notification Disabled', 'Workflow Step', 'Order', 'Type', 'Specify', 'Group']);
+    for (const r of ROWS.filter((x) => ['a', 'ba', 'd', 'u'].includes(x.o))) n.addRow(['No', 'No', `${P2} step ${r.o} - ${r.type}`, r.o, r.type, r.specify, r.groups.join(LIST)]);
+    n.addRow(['Custom Notifications']);
+    n.addRow(['Disabled', 'Notification', 'Business Process Condition', 'Recipients', 'Exclude Delegates in Notifications', 'Email Configuration', 'Reply To Email Address', 'Email Option', 'Trigger on Status / On Entry / On Exit / On Disposition', 'Subject', 'Body', 'Preview']);
+    n.addRow(['No', 'Completed notifies Manager', '', 'Manager', 'No', '', '', 'Default', 'Trigger on Status : Completed', 'Status', '', '']);
+    n.addRow(['No', 'Exit of a - Change Job notifies Manager', 'Initiator is not the manager?', 'Manager', 'No', '', '', 'Default', 'On Exit : a - Change Job', 'Submitted', '', '']);
+    n.addRow(['Yes', 'Exit of o - Assign Pay Group notifies Payroll', 'Pay group country changed?', ['Payroll Partner', 'Payroll Partner Region'].join(LIST), 'No', '', '', 'Default', 'On Exit : o - Assign Pay Group', 'Pay group changed', '', '']);
+    const a = wb.addWorksheet('Allowed Actions by Role');
+    preamble(a);
+    a.addRow(['Allowed Actions by Role']);
+    a.addRow(['Action', 'Mandatory Entry Condition', 'Can be performed by', 'Business Process']);
+    a.addRow(['Assign Pay Group', 'Primary job with no pending pay group change?' + WD, ['HR Partner', 'Payroll Partner'].join(LIST), 'Assign Pay Group (Default Definition)']);
+    const f = wb.addWorksheet('Available Rules & Fields');
+    preamble(f);
+    f.addRow(['Available Rules & Fields']);
+    // Long data cell mentioning "notification" and "recipient": must NOT make this a notifications sheet.
+    f.addRow(['Available Fields', ['Notification Recipient Count', 'Send Date', 'Trigger Status'].join(LIST)]);
+  });
+}
+
 copyFileSync(join(out, 'change-job-synthetic.xlsx'), join(here, '..', '..', '..', 'apps', 'web', 'public', 'sample-change-job.xlsx'));
 console.log('copied sample to apps/web/public/sample-change-job.xlsx');

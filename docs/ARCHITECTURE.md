@@ -305,15 +305,15 @@ sequenceDiagram
 
 ### 7.3 Sheet detection & column mapping
 
-A sheet is classed as **Steps** when its header row (searched within the first 15 rows) matches ≥ 4 of the canonical Steps fields. **Notifications** is detected the same way. A per-user **mapping profile** (header fingerprint → field map) is stored in IndexedDB.
+Each sheet of a real export has a one-cell **section-title row** ("Business Process Steps", "Notifications", "Allowed Actions by Role", "Allowed Services", "Related Links", "Available Rules & Fields"); the title decides the sheet's role (DEC-028). Within the Steps sheet, the header row is the one that maps ≥ 4 canonical fields. Files without titles fall back to header heuristics. A per-user **mapping profile** (header fingerprint → field map) is stored in IndexedDB.
 
-| Canonical field | Header synonyms (initial; **to validate against the corpus**, PRD Q1) | Required |
+| Canonical field | Header synonyms (**bold** = confirmed in a real export, DEC-029) | Required |
 |---|---|---|
-| `order` | Order | ✓ |
-| `rawType` | Type, Step Type | ✓ |
-| `task` | Specify, Task, Business Process | ✓ |
-| `groups` | Group, Groups, Security Group(s) | ✓ |
-| `condition` | If, Condition, Entry Condition | |
+| `order` | **Order** | ✓ |
+| `rawType` | **Type**, Step Type | ✓ |
+| `task` | **Specify**, Task, Business Process | ✓ |
+| `groups` | **Group**, Groups, Security Group(s) | ✓ |
+| `condition` | **If**, Condition, Entry Condition | |
 | `optional` | Optional | |
 | `dueDate` | Due Date, Due | |
 | `alternate` | Alternate, Alternate Group | |
@@ -322,6 +322,12 @@ A sheet is classed as **Steps** when its header row (searched within the first 1
 | `allMustAct` | All Must Act, All Assignees | |
 | `complete` | Complete, Process Complete | |
 | `step` (label) | Step | |
+| `additionalInfo` | **Additional Information** (lines `Restriction: …`, `Alternate: …`, others kept) | |
+| `routing` | **Routing Modifier** (Current / Proposed), Routing | |
+| `allMustAct` / `runAs` | **All**, **Run As User** | |
+| `validation` | **Validation** (`… (Critical)` / `(Warning)`) | |
+| `dueOnEffectiveDate` / `doNotAdvance` / `subprocess` | **Due Date Is Based On Effective Date**, **Do Not Advance**, **Subprocess Definitions** | |
+| *(definition)* | Rows above the table: **Effective Date** (Excel serial), **Due Date**, **Enable Autocomplete**, **Initiating Security Groups** | |
 
 Matching is case-insensitive, whitespace-collapsed and diacritic-folded. Localised header packs (DE, FR, NL, ES) arrive in Phase 3 (NFR-I18N).
 
@@ -329,11 +335,12 @@ Matching is case-insensitive, whitespace-collapsed and diacritic-folded. Localis
 
 | Concern | Rule |
 |---|---|
-| **Order → stage key** | Parse `^([a-z]+)(\d*)$` (case-insensitive). Sort letters by **length, then alphabetically** (`a…z, aa…`), then by numeric suffix (empty = 0). `stageKey = letters.padStart(3,'_') + suffix.padStart(3,'0')`. Unparseable → stage `zzz999` + `W-ORDER-UNPARSEABLE`. *Spike: confirm how Workday sequences beyond `z` and how suffixes behave, using the corpus.* |
+| **Order → stage key** | Parse `^([a-z]+)(\d*)$` (case-insensitive). Sort letters **alphabetically** (`a < ba < bb < d`), then by numeric suffix numerically (`k < k1 < k2 < k10`). `stageKey = letters.padEnd(3,'_') + suffix.padStart(3,'0')`. Unparseable → stage `zzz999` + `W-ORDER-UNPARSEABLE`. Rows out of key order → `W-ORDER-MISMATCH`. *Confirmed on a real export (DEC-026); the earlier "length first" rule was wrong.* |
 | **Parallel** | All steps sharing a `stageKey` belong to one stage (parallel) |
 | **Kind** | Map `rawType` via a lookup table (e.g. "Approval Chain" → `approval-chain`). Unmatched → `unknown` + `W-KIND-UNKNOWN` |
-| **Conditions** | Trim; strip a trailing "(Workday Owned)" → `workdayOwned = true`; deduplicate by normalised text; number C1…Cn in stage order; a cell holding several conditions is split only on explicit line breaks |
-| **Groups** | Split on line breaks and `;`; trim; first = primary lane |
+| **Text decoding** | Decode Workday's literal `&#xa;` line breaks (and other entities) **before** splitting; leftovers → `W-ENCODING` (DEC-027) |
+| **Conditions** | Trim; strip a trailing "(Workday Owned)" → `workdayOwned = true`; deduplicate by normalised text; number C1…Cn in stage order; a cell holding several conditions is split only on line breaks, never on `;` |
+| **Groups** | Split on line breaks only; trim; first = primary lane |
 | **Booleans** | "Yes/No/True/False/✓/blank" → boolean |
 | **Sub-process** | `kind = subprocess` when the type or task matches a known BP name pattern; `subProcessRef.process = task` |
 | **Initiation** | The first stage must contain an `initiation` step; if not → `W-NO-INITIATION` (render still proceeds) |

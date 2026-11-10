@@ -10,6 +10,8 @@ export const FIXTURES = {
   changeJob: 'change-job-synthetic.xlsx',
   changeJobRenamed: 'change-job-renamed-headers.xlsx',
   unknownLayout: 'unknown-layout.xlsx',
+  /** Anonymised mirror of a real Workday export: real layout, &#xa; encoding, order a, ba…bd, d… (DEC-030) */
+  workdayLayout: 'change-job-workday-layout.xlsx',
 } as const;
 
 export type FixtureName = keyof typeof FIXTURES;

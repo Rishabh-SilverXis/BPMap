@@ -1,6 +1,6 @@
 /**
  * The derivation pipeline (Architecture §8) as React hooks:
- *   model + overlay → buildGraph → layout → buildExportScene
+ *   model + overlay → buildGraph → layout → buildExportScene;  model → runRules (Health)
  * Pure functions, memoised on input identity. Increment 1 runs them on the main thread
  * (definitions are well under the 40-step worker threshold of §8; DEC-020).
  */
@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { buildGraph, type SemanticGraph } from '@bpmap/engine-graph';
 import { layout, type LayoutResult } from '@bpmap/engine-layout';
 import { buildExportScene, type Scene } from '@bpmap/scene';
+import { runRules, type Finding } from '@bpmap/engine-rules';
 import type { Theme } from '@bpmap/design-tokens';
 import type { ProcessDefinition } from '@bpmap/model';
 import { useStore } from '../store/store.ts';
@@ -19,6 +20,7 @@ export interface Diagram {
   graph: SemanticGraph;
   layout: LayoutResult;
   scene: Scene;
+  findings: Finding[];
 }
 
 export function useDiagram(def: ProcessDefinition | null, overlay: Overlay | undefined, theme: Theme): Diagram | null {
@@ -28,7 +30,7 @@ export function useDiagram(def: ProcessDefinition | null, overlay: Overlay | und
     const graph = buildGraph(def, { hiddenStepIds: new Set(ov.hidden), laneNames: ov.laneNames });
     const L = layout(graph);
     const scene = buildExportScene(def, graph, L, theme, { labels: ov.labels, notes: ov.notes });
-    return { def, overlay: ov, graph, layout: L, scene };
+    return { def, overlay: ov, graph, layout: L, scene, findings: runRules(def) };
   }, [def, overlay, theme]);
 }
 
