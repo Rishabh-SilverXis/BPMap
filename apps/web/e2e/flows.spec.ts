@@ -234,3 +234,67 @@ test('customisations file carries edits (not Workday data) to another browser (C
   await expect(p2.locator('svg g[data-role=conditions]').first()).toContainText('Transfer was requested');
   await ctx.close();
 });
+
+test('multi-file import links subprocesses; Open and Back navigate between them (IMP-04)', async ({ page }) => {
+  const { fixture } = await import('./helpers.ts');
+  await page.getByRole('button', { name: 'Add file' }).click();
+  await page.locator('input[type=file][accept*=".xlsx"]').first().setInputFiles([fixture('hire-with-subprocesses.xlsx'), fixture('propose-compensation-hire.xlsx')]);
+  await expect(page.getByRole('button', { name: /^Close Propose Compensation Hire/ })).toBeVisible();
+  // the subprocess tab is marked
+  await expect(page.locator('button[title^="Subprocess of Hire"]')).toContainText('Propose Compensation Hire');
+
+  await page.getByRole('button', { name: /^Hire \(Default Definition\)/ }).click();
+  await expect(page.locator('[data-testid=step]')).toHaveCount(5);
+  await page.getByRole('tab', { name: /^Import/ }).click();
+  const summary = page.getByTestId('subprocess-summary');
+  await expect(summary).toContainText('Calls 2 · 1 not loaded');
+  await expect(summary).toContainText('Request Onboarding (Default Definition)');
+
+  await page.locator('[data-testid=step]', { hasText: 'Propose Compensation Hire' }).click();
+  const link = page.getByTestId('subprocess-link');
+  await link.getByRole('button', { name: /^Open Propose Compensation Hire/ }).click();
+  await expect(page.locator('[aria-current=page]')).toContainText('Propose Compensation Hire');
+  await expect(page.locator('[data-testid=step]')).toHaveCount(3);
+
+  await page.getByTestId('back-from-subprocess').click();
+  await expect(page.locator('[aria-current=page]')).toContainText('Hire (Default Definition)');
+  await expect(page.getByRole('tabpanel')).toContainText('Runs a subprocess'); // the calling step is selected again
+  await page.locator('[data-testid=step]', { hasText: 'Request Onboarding' }).click();
+  await expect(page.getByTestId('subprocess-link')).toContainText('Not loaded');
+});
+
+test('more than 20 files: the first 20 are imported and the rest are named (IMP-04)', async ({ page }) => {
+  const { fixture } = await import('./helpers.ts');
+  await page.getByRole('button', { name: 'Add file' }).click();
+  await page.locator('input[type=file][accept*=".xlsx"]').first().setInputFiles(Array.from({ length: 21 }, () => fixture('propose-compensation-hire.xlsx')));
+  await expect(page.getByTestId('import-notice')).toContainText('Only 20 files can be imported at once. 1 was left out');
+});
+
+test('arrange: arrow keys and drag move a step, edges follow, kept after reload, Reset restores (VIS-11)', async ({ page }) => {
+  const step = page.locator('[data-testid=step]', { hasText: 'Assign Pay Group' });
+  const before = (await step.boundingBox())!;
+  await page.getByRole('button', { name: 'Arrange' }).click();
+  await step.focus();
+  await page.keyboard.press('Shift+ArrowDown');
+  await page.keyboard.press('Shift+ArrowDown');
+  await expect.poll(async () => (await step.boundingBox())!.y).toBeGreaterThan(before.y + 30);
+  await expect(page.getByRole('button', { name: 'Reset layout' })).toBeVisible();
+
+  // drag right by ~120 screen px
+  const b = (await step.boundingBox())!;
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width / 2 + 60, b.y + b.height / 2, { steps: 4 });
+  await page.mouse.move(b.x + b.width / 2 + 120, b.y + b.height / 2, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => (await step.boundingBox())!.x).toBeGreaterThan(b.x + 80);
+
+  await page.waitForTimeout(700); // autosave
+  await page.reload();
+  const again = page.locator('[data-testid=step]', { hasText: 'Assign Pay Group' });
+  await expect.poll(async () => (await again.boundingBox())!.y).toBeGreaterThan(before.y + 30);
+  await page.getByRole('button', { name: 'Arrange' }).click();
+  await page.getByRole('button', { name: 'Reset layout' }).click();
+  await expect.poll(async () => Math.round((await again.boundingBox())!.y)).toBe(Math.round(before.y));
+  await expect(page.getByRole('button', { name: 'Reset layout' })).toHaveCount(0);
+});

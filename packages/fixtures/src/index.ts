@@ -14,6 +14,9 @@ export const FIXTURES = {
   workdayLayout: 'change-job-workday-layout.xlsx',
   /** Same definition with step o removed: re-import / orphan reconciliation (IMP-06) */
   workdayLayoutV2: 'change-job-workday-layout-v2.xlsx',
+  /** Parent calling two subprocesses: one has its own file below, one is never loaded (IMP-04) */
+  hireWithSubprocesses: 'hire-with-subprocesses.xlsx',
+  proposeCompensationHire: 'propose-compensation-hire.xlsx',
 } as const;
 
 export type FixtureName = keyof typeof FIXTURES;

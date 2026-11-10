@@ -141,7 +141,7 @@ export function normaliseSteps(input: NormaliseInput): ProcessDefinition {
     if (!parseOrder(order)) warnings.push({ code: 'W-ORDER-UNPARSEABLE', row: sourceRow, message: `Order "${order}" is not a letter sequence; placed at the end.` });
     if (kind === 'unknown') warnings.push({ code: 'W-KIND-UNKNOWN', row: sourceRow, message: `Step type "${rawType}" is not recognised; shown as a generic step.` });
     const groups = cellLines(get(row, 'groups'));
-    if (!groups.length && !SYSTEM_KINDS.has(kind) && kind !== 'initiation')
+    if (!groups.length && !SYSTEM_KINDS.has(kind) && kind !== 'initiation' && kind !== 'subprocess') // a subprocess's own steps carry the groups
       warnings.push({ code: 'W-GROUP-EMPTY', row: sourceRow, message: `${KIND_LABEL[kind]} step ${order} has no security group.` });
     const conditionTexts = cellLines(get(row, 'condition')).map((t) => ({ text: t.replace(WORKDAY_OWNED, '').trim(), workdayOwned: WORKDAY_OWNED.test(t) }));
     const info = splitAdditionalInfo(cellLines(get(row, 'additionalInfo')));

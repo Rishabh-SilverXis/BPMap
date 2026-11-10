@@ -4,7 +4,7 @@ See Workday business process definitions as a readable swimlane flow, privately 
 
 > Working product name. Independent product, not affiliated with Workday, Inc. Workday® is a trademark of Workday, Inc.
 
-**Status:** Phase 2, Increment 2.3. Import a Workday *View Definition* Excel export → correct stages, parallel steps, conditions, lanes and decisions → **Executive / Process owner / Configurator** views → **scenario simulation** (answer conditions, see the real path) → **health checks** (HC-01..07, HC-16) → focus on a role or read it as an accessible step list → customise, including conditions in plain words (edits survive re-import; orphaned ones are flagged; share them as a customisations file) → export **PDF, PowerPoint (editable shapes), draw.io, Excel**, SVG, PNG or a project file, for one definition or a pack with a cover. Everything runs locally: nothing is uploaded, and an e2e test proves it.
+**Status:** Phase 2 complete (Increment 2.4). Import a Workday *View Definition* Excel export → correct stages, parallel steps, conditions, lanes and decisions → **Executive / Process owner / Configurator** views → **scenario simulation** (answer conditions, see the real path) → **health checks** (HC-01..07, HC-16) → import a definition with its subprocesses (linked: open one, come back) → focus on a role or read it as an accessible step list → nudge boxes by hand (Arrange) → customise, including conditions in plain words (edits survive re-import; orphaned ones are flagged; share them as a customisations file) → export **PDF, PowerPoint (editable shapes), draw.io, Excel**, SVG, PNG or a project file, for one definition or a pack with a cover. Everything runs locally: nothing is uploaded, and an e2e test proves it.
 
 ## Run it
 

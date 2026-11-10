@@ -19,6 +19,8 @@ export function App() {
   const lastRemoved = useStore((s) => s.lastRemoved);
   const restoreRemoved = useStore((s) => s.restoreRemoved);
   const forgetRemoved = useStore((s) => s.forgetRemoved);
+  const importNotice = useStore((s) => s.importNotice);
+  const dismissImportNotice = useStore((s) => s.dismissImportNotice);
   useEffect(() => {
     if (!lastRemoved) return;
     const t = setTimeout(forgetRemoved, 10_000);
@@ -35,6 +37,14 @@ export function App() {
     <div className="flex h-full flex-col">
       <TopBar />
       <ImportError />
+      {importNotice && (
+        <div role="status" data-testid="import-notice" className="flex items-start gap-2 border-b border-warning/40 bg-surface-sunken px-4 py-2 text-[13px] text-text">
+          <span className="flex-1">{importNotice}</span>
+          <button type="button" aria-label="Dismiss" onClick={dismissImportNotice} className="rounded p-1 text-text-secondary hover:bg-surface">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
       {!hasDefinitions ? (
         <div className="flex-1 overflow-auto">
           <ImportScreen />

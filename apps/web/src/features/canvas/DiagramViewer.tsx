@@ -14,7 +14,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { Minus, Plus, MoveVertical, MoveHorizontal } from 'lucide-react';
+import { Minus, Plus, MoveVertical, MoveHorizontal, Move, RotateCcw } from 'lucide-react';
 import { EXPORT_DIAGRAM_OFFSET, LANE_HEADER_WIDTH, clampMeta, groupTop, laneHeaderItems, stepMetaLines, stepTitle, translate, type SceneItem, type SceneRole } from '@bpmap/scene';
 import { KIND_LABEL } from '@bpmap/model';
 import { nodeTokens, semantic, type Theme } from '@bpmap/design-tokens';
@@ -39,6 +39,13 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: The
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState<number | null>(null); // null = not chosen yet → auto-fit on first size
   const [scrolledX, setScrolledX] = useState(false);
+  // Arrange mode (VIS-11): drag steps or move the focused one with arrow keys; stored as overlay nudges.
+  const [arrange, setArrange] = useState(false);
+  const setNudge = useStore((s) => s.setNudge);
+  const resetNudges = useStore((s) => s.resetNudges);
+  const hasNudges = Object.keys(diagram.overlay.nudges).length > 0;
+  const [drag, setDrag] = useState<{ id: string; sx: number; sy: number; dx: number; dy: number } | null>(null);
+  const justDragged = useRef(false);
   const { scene, layout: L, view } = diagram;
   const ox = EXPORT_DIAGRAM_OFFSET.x;
   const oy = EXPORT_DIAGRAM_OFFSET.y;
@@ -127,6 +134,16 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: The
     [diagram, view, L.nodes, ox, oy, tokens, surface],
   );
 
+  const nudgeOf = (id: string) => L.nodes.find((n) => n.id === id)?.nudge ?? { dx: 0, dy: 0 };
+  const onStepSelect = useCallback(
+    (id: string) => {
+      if (!justDragged.current) select(id);
+    },
+    [select],
+  );
+  // Leaving the definition or the swimlane views ends arrange mode.
+  useEffect(() => setArrange(false), [diagram.def.id, view]);
+
   // Frozen lane column: background strip + the same lane-name cells as the scene.
   const frozenWidth = ox + LANE_HEADER_WIDTH;
   // Focus a role → bring its first step into view, just right of the frozen column (VIS-08).
@@ -170,7 +187,7 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: The
           className="relative"
           style={{ width: scene.width * z, height: scene.height * z }}
           onClick={(e) => {
-            if (!(e.target as HTMLElement).closest('[data-step-id]')) select(null);
+            if (!justDragged.current && !(e.target as HTMLElement).closest('[data-step-id]')) select(null);
           }}
         >
           {/* Pinned layer (DEC-042, DEC-043): stays put while the diagram scrolls sideways. Holds the
@@ -196,7 +213,43 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: The
               </div>
             )}
           </div>
-          <div className="absolute left-0 top-0 origin-top-left" style={{ width: scene.width, height: scene.height, transform: `scale(${z})` }}>
+          <div
+            className="absolute left-0 top-0 origin-top-left"
+            style={{ width: scene.width, height: scene.height, transform: `scale(${z})` }}
+            onPointerDown={(e) => {
+              if (!arrange || e.button !== 0) return;
+              const id = (e.target as HTMLElement).closest<HTMLElement>('[data-step-id]')?.dataset.stepId;
+              if (!id) return;
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              setDrag({ id, sx: e.clientX, sy: e.clientY, dx: 0, dy: 0 });
+            }}
+            onPointerMove={(e) => {
+              if (!drag) return;
+              setDrag({ ...drag, dx: (e.clientX - drag.sx) / z, dy: (e.clientY - drag.sy) / z });
+            }}
+            onPointerUp={() => {
+              if (!drag) return;
+              const moved = Math.hypot(drag.dx, drag.dy) > 3;
+              if (moved) {
+                const cur = nudgeOf(drag.id);
+                setNudge(drag.id, cur.dx + drag.dx, cur.dy + drag.dy);
+                justDragged.current = true; // the click that follows the drop must not change the selection
+                setTimeout(() => (justDragged.current = false), 0);
+              }
+              setDrag(null);
+            }}
+            onPointerCancel={() => setDrag(null)}
+            onKeyDown={(e) => {
+              if (!arrange) return;
+              const id = (e.target as HTMLElement).closest<HTMLElement>('[data-step-id]')?.dataset.stepId;
+              const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+              if (!id || !dir) return;
+              e.preventDefault(); // don't scroll the diagram
+              const step = e.shiftKey ? 32 : 8;
+              const cur = nudgeOf(id);
+              setNudge(id, cur.dx + dir[0]! * step, cur.dy + dir[1]! * step);
+            }}
+          >
             <SceneSvg scene={scene} skip={pinFurniture ? ['step', ...FURNITURE] : ['step']} />
             {/* Focus on one role (VIS-08): fade every other lane, its edges and decisions. */}
             {focusLaneId &&
@@ -205,14 +258,41 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: The
                 .map((l) => (
                   <div key={l.id} data-testid="dimmed-lane" className="pointer-events-none absolute bg-bg/70" style={{ left: ox + LANE_HEADER_WIDTH, top: oy + l.y, width: scene.width - ox - LANE_HEADER_WIDTH, height: l.height }} />
                 ))}
-            {nodes.map((n) => (
-              <StepNode key={n.id} id={n.id} data={n.data} style={focusLaneId && n.laneId !== focusLaneId ? { ...n.style, opacity: 0.3 } : n.style} selected={n.id === selected} ariaLabel={n.ariaLabel} onSelect={select} />
-            ))}
+            {nodes.map((n) => {
+              const dimmed = focusLaneId && n.laneId !== focusLaneId;
+              const dragging = drag?.id === n.id;
+              const style = {
+                ...n.style,
+                ...(dimmed ? { opacity: 0.3 } : {}),
+                ...(arrange ? { cursor: dragging ? 'grabbing' : 'grab', touchAction: 'none' as const } : {}),
+                ...(dragging ? { transform: `translate(${drag.dx}px, ${drag.dy}px)`, zIndex: 5, boxShadow: 'var(--shadow-e3)' } : {}),
+              };
+              return <StepNode key={n.id} id={n.id} data={n.data} style={style} selected={n.id === selected} ariaLabel={arrange ? `${n.ariaLabel}. Arrange mode: drag or use arrow keys to move` : n.ariaLabel} onSelect={onStepSelect} />;
+            })}
           </div>
         </div>
       </div>
 
       <div className="absolute bottom-3 left-3 z-30 flex items-center gap-0.5 rounded-[var(--radius-md)] border border-border bg-surface p-1 shadow-[var(--shadow-e2)]" role="toolbar" aria-label="Zoom">
+        {hasLanes && (
+          <>
+            <button
+              type="button"
+              aria-pressed={arrange}
+              onClick={() => setArrange((a) => !a)}
+              title="Arrange: drag steps, or select one and use the arrow keys (Shift = bigger steps). Positions are kept when you re-import."
+              className={clsx('flex h-7 items-center gap-1 rounded px-1.5 text-xs font-medium', arrange ? 'bg-primary text-on-primary' : 'text-text-secondary hover:bg-surface-sunken')}
+            >
+              <Move className="h-3.5 w-3.5" aria-hidden /> Arrange
+            </button>
+            {hasNudges && (
+              <button type="button" onClick={resetNudges} title="Put every step back in its automatic position (undo is available)" className="flex h-7 items-center gap-1 rounded px-1.5 text-xs font-medium text-text-secondary hover:bg-surface-sunken">
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Reset layout
+              </button>
+            )}
+            <span className="mx-1 h-4 w-px bg-border" />
+          </>
+        )}
         <button type="button" aria-label="Zoom out" title="Zoom out (Ctrl/⌘ + wheel)" onClick={() => zoomTo([...STEPS].reverse().find((s) => s < z - 0.001) ?? ZOOM_MIN)} className="grid h-7 w-7 place-items-center rounded text-text-secondary hover:bg-surface-sunken">
           <Minus className="h-4 w-4" />
         </button>

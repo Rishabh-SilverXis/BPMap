@@ -92,8 +92,8 @@ await writeBook('unknown-layout.xlsx', (wb) => {
   const BR = '&#xa;'; // Workday writes line breaks as this literal text
   const LIST = BR + BR; // list items are separated by two of them
   const P2 = 'Change Job (Default Definition)';
-  const preamble = (ws) => {
-    ws.addRow([`Edit Business Process Definition: ${P2}`]);
+  const preamble = (ws, title = P2) => {
+    ws.addRow([`Edit Business Process Definition: ${title}`]);
     ws.addRow(['Effective Date', 46336]);
     ws.addRow(['Most Recent Used Date', 46315]);
     ws.addRow(['Due Date', '1 Week']);
@@ -136,15 +136,16 @@ await writeBook('unknown-layout.xlsx', (wb) => {
     R('u', 'To Do', 'Confirm Benefits Eligibility', ['Benefits Partner'], ['Pay rate type is salary?', 'Worker in an eligible employee group?']),
     R('v', 'Action', 'Change Benefit Elections', ['Employee As Self'], ['Change affects benefits?' + WD]),
   ];
-  const writeWorkdayLayout = (file, rows) => writeBook(file, (wb) => {
+  const writeWorkdayLayout = (file, rows, title = P2, extras = true) => writeBook(file, (wb) => {
     const ws = wb.addWorksheet('Business Process Steps');
-    preamble(ws);
+    preamble(ws, title);
     ws.addRow(['Business Process Steps']);
     ws.addRow(['Step', 'Order', 'If', 'Type', 'Specify', 'Optional', 'Group', 'Additional Information', 'Routing Modifier', 'All', 'Run As User', 'Validation', 'Due Date', 'Due Date Is Based On Effective Date', 'Do Not Advance', 'Complete', 'Subprocess Definitions']);
     for (const r of rows) {
-      const label = `${P2} step ${r.o} - ${r.type}${r.type === 'Service' ? ` [${r.specify}]` : ''}`;
-      ws.addRow([label, r.o, r.conds.join(LIST), r.type, r.specify, 'No', r.groups.join(LIST), r.info.join(BR), r.routing, '', '', r.validation.join(LIST), r.due, '', 'No', r.complete, '']);
+      const label = `${title} step ${r.o} - ${r.type}${r.type === 'Service' ? ` [${r.specify}]` : ''}`;
+      ws.addRow([label, r.o, r.conds.join(LIST), r.type, r.specify, 'No', r.groups.join(LIST), r.info.join(BR), r.routing, '', '', r.validation.join(LIST), r.due, '', 'No', r.complete, r.sub ?? '']);
     }
+    if (!extras) return;
     const n = wb.addWorksheet('Notifications');
     preamble(n);
     n.addRow(['Notifications']);
@@ -169,6 +170,23 @@ await writeBook('unknown-layout.xlsx', (wb) => {
   });
   await writeWorkdayLayout('change-job-workday-layout.xlsx', ROWS);
   await writeWorkdayLayout('change-job-workday-layout-v2.xlsx', ROWS.filter((r) => r.o !== 'o'));
+
+  // 6. Multi-file import with subprocesses (IMP-04, DEC-053): a parent that calls two subprocesses,
+  //    one of which has its own export (links) and one that is never loaded (listed as missing).
+  const HIRE = 'Hire (Default Definition)';
+  const PCH = 'Propose Compensation Hire (Default Definition)';
+  await writeWorkdayLayout('hire-with-subprocesses.xlsx', [
+    R('a', 'Initiation', '', [], []),
+    R('b', 'Approval', '', ['Manager'], ['Hire is not from a job application?']),
+    { ...R('c', 'Sub-Process', 'Propose Compensation Hire', [], []), sub: PCH },
+    { ...R('d', 'Sub-Process', 'Request Onboarding', [], ['Worker is an employee?' + WD]), sub: 'Request Onboarding (Default Definition)' },
+    R('e', 'Action', 'Assign Pay Group', ['Payroll Partner'], [], [], '', '2 Days', 'Yes'),
+  ], HIRE, false);
+  await writeWorkdayLayout('propose-compensation-hire.xlsx', [
+    R('a', 'Initiation', '', [], []),
+    R('b', 'Action', 'Propose Compensation', ['Compensation Partner'], []),
+    R('c', 'Approval', '', ['Compensation Administrator'], ['Pay above range?'], [], '', '', 'Yes'),
+  ], PCH, false);
 }
 
 // 5. Same definition after a configuration change (IMP-06 re-import): step o removed.

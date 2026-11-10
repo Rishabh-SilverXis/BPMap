@@ -5,7 +5,7 @@
  *   Conditions answered "yes" are RESOLVED for this case: they no longer make a step conditional,
  *   so its dashed outline and decision diamond disappear (DEC-034).
  */
-import type { ProcessDefinition } from '@bpmap/model';
+import { conditionKey, type ProcessDefinition } from '@bpmap/model';
 
 export type Answer = 'yes' | 'no' | 'unset';
 export type Answers = Readonly<Record<string, Answer>>;
@@ -13,7 +13,10 @@ export type Answers = Readonly<Record<string, Answer>>;
 export interface ScenarioPreset {
   id: string;
   name: string;
+  /** Answers by condition id for the definition as currently imported. */
   answers: Record<string, Answer>;
+  /** The same answers keyed by conditionKey(Workday text), so a preset survives renumbering (DEC-052). */
+  byText?: Record<string, Answer>;
 }
 
 /** Per-definition scenario state kept in the store and persisted (SCN-01..03). */
@@ -52,9 +55,59 @@ export function pruneScenario(def: ProcessDefinition, s: ScenarioState): Scenari
   return { answers: keep(s.answers), decisions: s.decisions.filter((d) => known.has(d)), presets: s.presets.map((p) => ({ ...p, answers: keep(p.answers) })) };
 }
 
+/** Add text-keyed answers to a preset (on save and before sharing). */
+export function withTextKeys(def: ProcessDefinition, p: ScenarioPreset): ScenarioPreset {
+  const textOf = new Map(def.conditions.map((c) => [c.id as string, conditionKey(c.text)]));
+  const byText: Record<string, Answer> = { ...(p.byText ?? {}) };
+  for (const [id, a] of Object.entries(p.answers)) {
+    const k = textOf.get(id);
+    if (k) byText[k] = a;
+  }
+  return { ...p, byText };
+}
+
+/** A preset's answers for THIS definition: by condition text when known, else by id (older presets). */
+export function presetAnswersFor(def: ProcessDefinition, p: ScenarioPreset): Record<string, Answer> {
+  if (!p.byText || !Object.keys(p.byText).length) return pruneScenario(def, { answers: p.answers, decisions: [], presets: [] }).answers;
+  const out: Record<string, Answer> = {};
+  for (const c of def.conditions) {
+    const a = p.byText[conditionKey(c.text)];
+    if (a) out[c.id] = a;
+  }
+  return out;
+}
+
+/**
+ * Re-import (IMP-06): translate answers, decision toggles and presets from the old definition's
+ * condition ids to the new one's via the condition text, then drop what no longer exists.
+ * Without the old definition (first import) this is pruneScenario.
+ */
+export function rekeyScenario(oldDef: ProcessDefinition | undefined, newDef: ProcessDefinition, s: ScenarioState): ScenarioState {
+  if (!oldDef) return pruneScenario(newDef, s);
+  const keyOfOld = new Map(oldDef.conditions.map((c) => [c.id as string, conditionKey(c.text)]));
+  const idOfNew = new Map(newDef.conditions.map((c) => [conditionKey(c.text), c.id as string]));
+  const map = (id: string) => {
+    const k = keyOfOld.get(id);
+    return k ? idOfNew.get(k) : undefined;
+  };
+  const rekey = (a: Record<string, Answer>) => {
+    const out: Record<string, Answer> = {};
+    for (const [id, v] of Object.entries(a)) {
+      const n = map(id);
+      if (n) out[n] = v;
+    }
+    return out;
+  };
+  return {
+    answers: rekey(s.answers),
+    decisions: [...new Set(s.decisions.map(map).filter((x): x is string => !!x))],
+    presets: s.presets.map((p) => withTextKeys(newDef, { ...withTextKeys(oldDef, p), answers: rekey(p.answers) })),
+  };
+}
+
 export function isScenarioState(v: unknown): v is ScenarioState {
   if (!v || typeof v !== 'object') return false;
   const o = v as Record<string, unknown>;
   const okAnswers = (a: unknown) => !!a && typeof a === 'object' && Object.values(a as object).every((x) => x === 'yes' || x === 'no' || x === 'unset');
-  return okAnswers(o.answers) && Array.isArray(o.decisions) && Array.isArray(o.presets) && (o.presets as unknown[]).every((p) => !!p && typeof p === 'object' && typeof (p as ScenarioPreset).name === 'string' && okAnswers((p as ScenarioPreset).answers));
+  return okAnswers(o.answers) && Array.isArray(o.decisions) && Array.isArray(o.presets) && (o.presets as unknown[]).every((p) => !!p && typeof p === 'object' && typeof (p as ScenarioPreset).name === 'string' && okAnswers((p as ScenarioPreset).answers) && ((p as ScenarioPreset).byText === undefined || okAnswers((p as ScenarioPreset).byText)));
 }

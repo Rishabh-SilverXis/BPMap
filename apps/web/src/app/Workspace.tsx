@@ -3,14 +3,14 @@
  * Lazy-loaded by App so the import screen ships without React Flow and the engines (Architecture §23, DEC-022).
  */
 import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Undo2, Redo2, Download, Copy, FolderOpen, X, Check, Loader2, Plus, ChevronDown, ScanSearch, List, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Undo2, Redo2, Download, Copy, FolderOpen, X, Check, Loader2, Plus, ChevronDown, ScanSearch, List, ChevronLeft, ChevronRight, CornerDownRight, ArrowLeft } from 'lucide-react';
 import clsx from 'clsx';
 import { useStore as useZustand } from 'zustand';
 import { buildConditionsScene, buildCoverScene, summaryLine } from '@bpmap/scene';
 import type { Theme } from '@bpmap/design-tokens';
 import { useActiveDefinition, useActiveOverlay, useActiveScenario, useActiveView, useStore } from '../store/store.ts';
 import type { View } from '../store/overlay.ts';
-import { deriveDiagram, useDiagram, type Diagram } from './derive.ts';
+import { deriveDiagram, useDiagram, useSubprocessLinks, type Diagram } from './derive.ts';
 import { DropZone } from '../features/import/ImportScreen.tsx';
 import { DiagramViewer } from '../features/canvas/DiagramViewer.tsx';
 import { StepList } from '../features/canvas/StepList.tsx';
@@ -52,14 +52,30 @@ function DefinitionTabs() {
   const activeId = useStore((s) => s.activeId);
   const setActive = useStore((s) => s.setActive);
   const remove = useStore((s) => s.removeDefinition);
+  const cameFrom = useStore((s) => s.cameFrom);
+  const back = useStore((s) => s.backFromSubprocess);
+  const links = useSubprocessLinks();
+  const parentOf = (id: string) => links.find((l) => l.toId === id);
   const [adding, setAdding] = useState(false);
   useEffect(() => setAdding(false), [defs.length]);
   return (
     <div className="shrink-0 border-b border-border bg-surface">
       <div className="flex h-10 items-center gap-2 overflow-x-auto px-4">
+        {cameFrom && cameFrom.defId !== activeId && defs.some((d) => d.id === cameFrom.defId) && (
+          <button type="button" onClick={back} data-testid="back-from-subprocess" className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-primary px-3 text-[13px] font-medium text-on-primary">
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to {titleOf(defs.find((d) => d.id === cameFrom.defId)!)} · step {defs.find((d) => d.id === cameFrom.defId)!.steps.find((s) => s.id === cameFrom.stepId)?.order ?? ''}
+          </button>
+        )}
         {defs.map((d) => (
           <span key={d.id} className={clsx('flex h-7 items-center gap-1 rounded-full border pl-3 pr-1 text-[13px]', d.id === activeId ? 'border-accent bg-[#E9F7F4] font-semibold text-primary dark:bg-surface-sunken dark:text-text' : 'border-border text-text-secondary')}>
-            <button type="button" onClick={() => setActive(d.id)} aria-current={d.id === activeId ? 'page' : undefined}>
+            <button
+              type="button"
+              onClick={() => setActive(d.id)}
+              aria-current={d.id === activeId ? 'page' : undefined}
+              title={parentOf(d.id) ? `Subprocess of ${titleOf(defs.find((x) => x.id === parentOf(d.id)!.fromId)!)} (step ${parentOf(d.id)!.stepOrder})` : undefined}
+              className="flex items-center gap-1"
+            >
+              {parentOf(d.id) && <CornerDownRight className="h-3 w-3 text-text-muted" aria-label="Subprocess" />}
               {d.variant ? `${d.process} (${d.variant})` : d.process}
             </button>
             <button

@@ -27,7 +27,20 @@ export interface LayoutOptions {
   startSpace: number;
   endSpace: number;
   markerR: number;
+  /**
+   * Manual nudges per step (VIS-11, DEC-054), in layout units. A nudge never leaves the step's
+   * lane or stage: the lane grows taller / the stage column wider to make room, so the swimlane
+   * grid and the gutter routing stay valid and every edge follows automatically.
+   */
+  nudges?: Readonly<Record<string, Nudge>>;
 }
+
+export interface Nudge {
+  dx: number;
+  dy: number;
+}
+/** Largest nudge in any direction (keeps a stray drag from producing a 10,000 px column). */
+export const MAX_NUDGE = 480;
 
 export const DEFAULT_LAYOUT: LayoutOptions = {
   nodeWidth: 188,
@@ -51,7 +64,7 @@ export type Point = [number, number];
 
 export interface LaidOutLane { id: string; label: string; system: boolean; y: number; height: number }
 export interface LaidOutStage { index: number; label: string; x: number; width: number; parallel: boolean }
-export interface LaidOutNode { id: string; x: number; y: number; width: number; height: number; stageIndex: number; laneId: string }
+export interface LaidOutNode { id: string; x: number; y: number; width: number; height: number; stageIndex: number; laneId: string; /** the nudge actually applied (after clamping) */ nudge: Nudge }
 export interface LaidOutBar { stageIndex: number; role: 'split' | 'join'; x: number; y: number; width: number; height: number }
 export interface LaidOutDiamond { stepId: string; cx: number; cy: number; r: number; conditionIds: string[] }
 export interface LaidOutMarker { cx: number; cy: number; r: number }
@@ -76,59 +89,86 @@ export function layout(graph: SemanticGraph, options: Partial<LayoutOptions> = {
   const o = { ...DEFAULT_LAYOUT, ...options };
   const hasDiamond = (id: string) => graph.steps[id]!.decision;
 
-  // 1. Stack depth per lane = max steps that lane has in any one stage.
+  // 0. Nudges (VIS-11): clamp to ±MAX_NUDGE; upward moves stop at the lane's top edge (below).
+  const rawNudge = (id: string): Nudge => {
+    const n = o.nudges?.[id];
+    return { dx: clamp(Math.round(n?.dx ?? 0), -MAX_NUDGE, MAX_NUDGE), dy: clamp(Math.round(n?.dy ?? 0), -MAX_NUDGE, MAX_NUDGE) };
+  };
+
+  // 1. Stack depth per lane = max steps that lane has in any one stage; slot = position in the stack.
   const depth = new Map<string, number>(graph.lanes.map((l) => [l.id, 1]));
+  const slotOf = new Map<string, number>();
   const cellCount = new Map<string, number>();
-  for (const gs of Object.values(graph.steps)) {
-    const k = `${gs.laneId}|${gs.stageIndex}`;
-    const n = (cellCount.get(k) ?? 0) + 1;
-    cellCount.set(k, n);
-    depth.set(gs.laneId, Math.max(depth.get(gs.laneId) ?? 1, n));
+  graph.stages.forEach((s, si) => {
+    for (const id of s.stepIds) {
+      const gs = graph.steps[id]!;
+      const k = `${gs.laneId}|${si}`;
+      const n = (cellCount.get(k) ?? 0) + 1;
+      cellCount.set(k, n);
+      slotOf.set(id, n - 1);
+      depth.set(gs.laneId, Math.max(depth.get(gs.laneId) ?? 1, n));
+    }
+  });
+  const slotTop = (id: string) => o.lanePadY + slotOf.get(id)! * (o.nodeHeight + o.stackGap);
+  const nudgeOf = new Map<string, Nudge>();
+  for (const id of slotOf.keys()) {
+    const r = rawNudge(id);
+    nudgeOf.set(id, { dx: r.dx, dy: Math.max(r.dy, 4 - slotTop(id)) }); // never above the lane
   }
 
-  // 2. Lanes (rows).
+  // 2. Lanes (rows). A step nudged down makes its lane taller.
+  const laneBottom = new Map<string, number>();
+  for (const [id, n] of nudgeOf) {
+    const lane = graph.steps[id]!.laneId;
+    laneBottom.set(lane, Math.max(laneBottom.get(lane) ?? 0, slotTop(id) + n.dy + o.nodeHeight + o.lanePadY));
+  }
   let y = o.stageHeaderHeight;
   const lanes: LaidOutLane[] = graph.lanes.map((l) => {
     const d = depth.get(l.id) ?? 1;
-    const height = 2 * o.lanePadY + d * o.nodeHeight + (d - 1) * o.stackGap;
+    const height = Math.max(2 * o.lanePadY + d * o.nodeHeight + (d - 1) * o.stackGap, laneBottom.get(l.id) ?? 0);
     const lane = { id: l.id, label: l.label, system: l.system, y, height };
     y += height;
     return lane;
   });
   const laneById = new Map(lanes.map((l) => [l.id, l]));
 
-  // 3. Stages (columns). Room for the start marker before the first column.
+  // 3. Stages (columns). Room for the start marker before the first column. Nudges left/right add
+  //    room on that side of the column, so steps never cross into the next stage or its gutter.
   let x = o.laneHeaderWidth + o.startSpace;
   const pads: number[] = [];
   const stages: LaidOutStage[] = graph.stages.map((s, index) => {
     const pad = s.parallel ? o.parallelColPad : o.colPad;
     pads.push(pad);
-    const width = o.nodeWidth + 2 * pad + (s.stepIds.some(hasDiamond) ? o.diamondSpace : 0);
+    const dxs = s.stepIds.map((id) => nudgeOf.get(id)!.dx);
+    const left = Math.max(0, ...dxs.map((d) => -d));
+    const right = Math.max(0, ...dxs);
+    const width = o.nodeWidth + 2 * pad + (s.stepIds.some(hasDiamond) ? o.diamondSpace : 0) + left + right;
     const st = { index, label: s.label, x, width, parallel: s.parallel };
     x += width;
     return st;
   });
 
-  // 4. Nodes: right-aligned in the column (centred when there is no diamond), stacked by source row.
+  // 4. Nodes: right-aligned in the column (centred when there is no diamond), stacked by source row,
+  //    then moved by their nudge.
   const nodes: LaidOutNode[] = [];
   const nodeById = new Map<string, LaidOutNode>();
-  const used = new Map<string, number>();
   graph.stages.forEach((s, si) => {
+    const st = stages[si]!;
+    const dxs = s.stepIds.map((id) => nudgeOf.get(id)!.dx);
+    const right = Math.max(0, ...dxs);
     for (const id of s.stepIds) {
       const gs = graph.steps[id]!;
       const lane = laneById.get(gs.laneId)!;
-      const k = `${gs.laneId}|${si}`;
-      const slot = used.get(k) ?? 0;
-      used.set(k, slot + 1);
-      const st = stages[si]!;
+      const nudge = nudgeOf.get(id)!;
       const node = {
         id,
-        x: st.x + st.width - pads[si]! - o.nodeWidth,
-        y: lane.y + o.lanePadY + slot * (o.nodeHeight + o.stackGap),
+        x: st.x + st.width - right - pads[si]! - o.nodeWidth + nudge.dx,
+        y: lane.y + slotTop(id) + nudge.dy,
         width: o.nodeWidth,
         height: o.nodeHeight,
         stageIndex: si,
         laneId: gs.laneId,
+        nudge,
       };
       nodes.push(node);
       nodeById.set(id, node);

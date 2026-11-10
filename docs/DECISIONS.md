@@ -433,3 +433,45 @@ Scope: the remaining Phase 2 P1 items that are about handing work to other peopl
 - **Pack cover:** `buildCoverScene` shows title, date and contents (name, summary, view) with open findings per definition (critical · warning · info; dismissed ones excluded).
 - **Why scenes:** each page is an ordinary `Scene`, so every exporter renders it with no format-specific code, and the cover looks the same in PDF, PowerPoint and draw.io.
 - **Dev server:** `fflate` added to `optimizeDeps.include` (it is now lazily used on the main thread as well as in the worker; see DEC-048).
+
+# Phase 2 · Increment 2.4: subprocesses, layout nudges, renumbering-proof scenarios (2026-11-11)
+
+Closes Phase 2's buildable scope. Not built: EXP-09 (account-gated export formats), which needs accounts and a backend (Phase 3+); every format stays free and local for now.
+
+## DEC-052 · Scenario answers and presets follow the condition text across re-imports
+- **Date:** 2026-11-11 · **Serves:** SCN-01..03, IMP-06; closes the limit noted in DEC-050
+- **Problem:** Answers, decision toggles and presets were stored by condition id. On re-import, `pruneScenario` kept every id that still existed. If a step was added or removed earlier in the process, "C7" became a *different* condition and the saved answer silently applied to it. The v2 fixture reproduces this: removing step `o` shifts every later Cn.
+- **Decision:**
+  - `rekeyScenario(oldDef, newDef, state)` (engine-scenario) translates answers, decisions and preset answers old id → condition text → new id, and drops conditions that no longer exist. The store calls it on every re-import.
+  - Presets also carry `byText` (answers keyed by `conditionKey`). `presetAnswersFor(def, preset)` applies by text when present, else by id (older presets still work).
+  - The customisations file writes `byText`, and applying it re-derives answers against the receiving export.
+  - `conditionKey` moved to `@bpmap/model`, so the overlay (DEC-049) and scenarios share one normalisation.
+- **Tests:** 4 unit tests on the renumbering fixture (rekey, drop, text-keyed preset on a renumbered export, legacy preset).
+
+## DEC-053 · Multi-file import and subprocess linking
+- **Date:** 2026-11-11 · **Serves:** IMP-04
+- **Finding first:** the real Change Job export has a "Subprocess Definitions" column, but it is empty on every step. Its two "Sub Process" mentions are *allowed actions* in the security sheet, not steps, so the importer was not missing anything. Linking is therefore built and tested on synthetic fixtures (`hire-with-subprocesses.xlsx` calls two subprocesses; `propose-compensation-hire.xlsx` is one of them).
+- **Decision:**
+  - `linkSubprocesses(defs)` (pure, `@bpmap/model/links.ts`) matches each Sub-Process step to a loaded definition, in order: exact "Process (Variant)" → process name when exactly one definition has it → the step's task name. It never links a definition to itself, and ambiguous matches stay unlinked rather than guessing.
+  - UI:
+    - **Step panel:** "Runs a subprocess" with **Open**, or "Not loaded, add its export".
+    - **Back chip:** opening a subprocess shows "← Back to Hire · step c", which returns with the calling step selected.
+    - **Tabs:** subprocess tabs get a ↳ marker with a "Subprocess of …" tooltip.
+    - **Import tab:** "Calls N · M not loaded" and "Called by".
+  - Up to **20 files** per drop. Extra files are named in a dismissible notice, not dropped silently.
+  - Sub-Process steps no longer raise W-GROUP-EMPTY: in Workday the subprocess's own steps carry the groups.
+- **Not built:** a separate notifications export as its own file. Workday's View Definition already includes the Notifications sheet, which we parse (DEC-029).
+
+## DEC-054 · Layout nudges grow the grid instead of breaking it
+- **Date:** 2026-11-11 · **Serves:** VIS-11
+- **Decision:**
+  - Overlay `nudges: Record<stepId, {dx, dy}>`, passed to `layout()`, which applies them at node placement (step 4), *before* diamonds, bars and gutter routing, so every connector follows the moved box with no routing changes.
+  - A nudge never leaves the step's lane or stage. Moving down makes the lane taller; moving left or right adds room on that side of the stage column. Later lanes and stages shift accordingly. Moves up stop at the lane's top edge, and each axis is capped at ±480.
+  - With no nudges the layout is byte-identical (the golden snapshots did not change).
+  - **Arrange** mode in the viewer toolbar:
+    - Drag shows a preview while moving and commits on drop as one undo step.
+    - The arrow keys move the focused step 8 px (Shift: 32 px), as a keyboard alternative.
+    - **Reset layout** clears all nudges, and can be undone.
+    - The mode is off by default, so clicking and scrolling behave as before. The click that ends a drag is ignored, so dropping doesn't change the selection.
+  - Nudges are keyed by stable step id, so they survive re-import. Removed steps' nudges are listed as orphans. Executive view ignores nudges.
+- **Why not free placement:** free x/y would let a box drift into another role's lane or the wrong stage, making the swimlane lie, and would need a general edge router. Growing the grid keeps the diagram truthful and keeps routing trivial.

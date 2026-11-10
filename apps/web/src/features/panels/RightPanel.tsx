@@ -5,11 +5,11 @@
  */
 import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { Finding } from '@bpmap/engine-rules';
-import { MousePointerClick, TriangleAlert, Info, OctagonAlert, CircleCheck, Bell } from 'lucide-react';
+import { MousePointerClick, TriangleAlert, Info, OctagonAlert, CircleCheck, Bell, CornerDownRight } from 'lucide-react';
 import clsx from 'clsx';
 import { KIND_LABEL } from '@bpmap/model';
 import { stepTitle } from '@bpmap/scene';
-import type { Diagram } from '../../app/derive.ts';
+import { useSubprocessLinks, type Diagram } from '../../app/derive.ts';
 import { useStore, type PanelTab } from '../../store/store.ts';
 import { ScenarioPanel } from './ScenarioPanel.tsx';
 import { buildGraph } from '@bpmap/engine-graph';
@@ -123,6 +123,7 @@ function StepPanel({ diagram }: { diagram: Diagram }) {
         {step.additionalInfo && <Row k="Other settings">{step.additionalInfo}</Row>}
         {step.complete && <Row k="Completion">Process is complete after this step</Row>}
       </dl>
+      <SubprocessLinkRow diagram={diagram} stepId={step.id} />
       {step.validations.length > 0 && (
         <section>
           <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">Validations ({step.validations.length})</h3>
@@ -230,6 +231,7 @@ function ReportPanel({ diagram }: { diagram: Diagram }) {
   return (
     <div className="flex flex-col gap-4 text-[13px]">
       <OrphanNotice diagram={diagram} />
+      <SubprocessSummary diagram={diagram} />
       {report ? (
         <dl>
           <Row k="File">{report.fileName}</Row>
@@ -440,6 +442,7 @@ function OrphanNotice({ diagram }: { diagram: Diagram }) {
     ...orphans.hidden.map((k) => `Hidden step ${k}`),
     ...orphans.laneNames.map((k) => `Lane name "${overlay.laneNames[k]}" for ${k}`),
     ...orphans.conditionText.map((k) => `Plain words "${overlay.conditionText[k]}" for the condition "${k}"`),
+    ...orphans.nudges.map((k) => `Moved position of ${k}`),
   ];
   return (
     <section role="status" className="rounded-[var(--radius-md)] border border-warning/50 bg-surface-sunken p-3" data-testid="orphans">
@@ -457,6 +460,89 @@ function OrphanNotice({ diagram }: { diagram: Diagram }) {
       <button type="button" onClick={() => removeOrphans(orphans)} className="mt-2 text-xs font-semibold text-action hover:underline">
         Remove {n === 1 ? 'it' : `all ${n}`} (undo is available)
       </button>
+    </section>
+  );
+}
+
+const defTitle = (d: { process: string; variant: string }) => (d.variant ? `${d.process} (${d.variant})` : d.process);
+
+/** Step panel: what a Sub-Process step runs, with a link when that definition is loaded (IMP-04). */
+function SubprocessLinkRow({ diagram, stepId }: { diagram: Diagram; stepId: string }) {
+  const link = useSubprocessLinks().find((l) => l.fromId === diagram.def.id && l.stepId === stepId);
+  const target = useStore((s) => (link?.toId ? s.definitions.find((d) => d.id === link.toId) : undefined));
+  const openSubprocess = useStore((s) => s.openSubprocess);
+  if (!link) return null;
+  return (
+    <section className="rounded-[var(--radius-md)] border border-border bg-surface-sunken p-3 text-[13px]" data-testid="subprocess-link">
+      <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">Runs a subprocess</h3>
+      <p className="mt-1">{link.name}</p>
+      {target ? (
+        <button type="button" onClick={() => openSubprocess(target.id, { defId: diagram.def.id, stepId })} className="mt-2 flex items-center gap-1 text-xs font-semibold text-action hover:underline">
+          <CornerDownRight className="h-3.5 w-3.5" aria-hidden /> Open {defTitle(target)}
+        </button>
+      ) : (
+        <p className="mt-1 text-xs text-text-muted">Not loaded. Add its View Definition export (Add file) to see its steps; it links automatically.</p>
+      )}
+    </section>
+  );
+}
+
+/** Import tab: subprocesses this definition calls and the definitions that call it (IMP-04). */
+function SubprocessSummary({ diagram }: { diagram: Diagram }) {
+  const links = useSubprocessLinks();
+  const defs = useStore((s) => s.definitions);
+  const select = useStore((s) => s.select);
+  const openSubprocess = useStore((s) => s.openSubprocess);
+  const setActive = useStore((s) => s.setActive);
+  const calls = links.filter((l) => l.fromId === diagram.def.id);
+  const calledBy = links.filter((l) => l.toId === diagram.def.id);
+  if (!calls.length && !calledBy.length) return null;
+  const nameOf = (id: string) => {
+    const d = defs.find((x) => x.id === id);
+    return d ? defTitle(d) : id;
+  };
+  const missing = calls.filter((l) => !l.toId).length;
+  return (
+    <section className="rounded-[var(--radius-md)] border border-border p-3" data-testid="subprocess-summary">
+      <h3 className="font-semibold">Subprocesses</h3>
+      {calls.length > 0 && (
+        <>
+          <p className="mt-1 text-text-secondary">
+            Calls {calls.length}
+            {missing ? ` · ${missing} not loaded` : ' · all loaded'}
+          </p>
+          <ul className="mt-1.5 flex flex-col gap-1">
+            {calls.map((l) => (
+              <li key={l.stepId} className="flex flex-wrap items-baseline gap-x-2">
+                <button type="button" className="font-mono text-xs text-action hover:underline" onClick={() => select(l.stepId)} title="Show the calling step">
+                  step {l.stepOrder}
+                </button>
+                <span className="min-w-0 flex-1">{l.name}</span>
+                {l.toId ? (
+                  <button type="button" className="text-xs font-semibold text-action hover:underline" onClick={() => openSubprocess(l.toId!, { defId: diagram.def.id, stepId: l.stepId })}>
+                    Open
+                  </button>
+                ) : (
+                  <span className="text-xs text-warning">Not loaded</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {calledBy.length > 0 && (
+        <p className="mt-2 text-text-secondary">
+          Called by{' '}
+          {calledBy.map((l, i) => (
+            <span key={`${l.fromId}|${l.stepId}`}>
+              {i > 0 && ', '}
+              <button type="button" className="text-action hover:underline" onClick={() => setActive(l.fromId)}>
+                {nameOf(l.fromId)} · step {l.stepOrder}
+              </button>
+            </span>
+          ))}
+        </p>
+      )}
     </section>
   );
 }

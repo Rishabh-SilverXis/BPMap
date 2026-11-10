@@ -40,3 +40,10 @@ export function makeStepIds(steps: readonly StepIdInput[]): StepId[] {
 
 export const definitionIdOf = (process: string, variant: string): string =>
   variant ? `${slug(process)}--${slug(variant)}` : slug(process);
+
+/**
+ * Stable key for a condition across re-imports: its Workday text, case- and space-normalised.
+ * Condition ids ("C3") follow stage order and shift when steps change (DEC-010), so anything the
+ * user attaches to a condition is keyed by this instead (DEC-049, DEC-052).
+ */
+export const conditionKey = (workdayText: string): string => workdayText.toLowerCase().replace(/\s+/g, ' ').trim();

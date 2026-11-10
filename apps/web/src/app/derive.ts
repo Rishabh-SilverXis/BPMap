@@ -12,7 +12,7 @@ import { NODE_HEIGHT, buildExportScene, type Scene } from '@bpmap/scene';
 import { emptyScenario, evaluateScenario, type ScenarioResult, type ScenarioState } from '@bpmap/engine-scenario';
 import { runRules, type Finding } from '@bpmap/engine-rules';
 import type { Theme } from '@bpmap/design-tokens';
-import type { ProcessDefinition } from '@bpmap/model';
+import { linkSubprocesses, type ProcessDefinition, type SubprocessLink } from '@bpmap/model';
 import { useStore } from '../store/store.ts';
 import { emptyOverlay, plainConditions, type Overlay, type View } from '../store/overlay.ts';
 
@@ -44,7 +44,7 @@ export function deriveDiagram(def: ProcessDefinition, overlay: Overlay | undefin
       resolvedConditionIds: outcome.resolved,
       decisionConditionIds: new Set(sc.decisions),
     });
-    const L = layout(graph, { nodeHeight: view === 'configurator' ? NODE_HEIGHT.configurator : NODE_HEIGHT.owner });
+    const L = layout(graph, { nodeHeight: view === 'configurator' ? NODE_HEIGHT.configurator : NODE_HEIGHT.owner, nudges: ov.nudges });
     const subtitle = outcome.summary ? `${outcome.summary} (${outcome.skipped.size} step${outcome.skipped.size === 1 ? '' : 's'} skipped)` : undefined;
     const conditionText = plainConditions(def.conditions, ov);
     const scene = buildExportScene(def, graph, L, theme, { labels: ov.labels, notes: ov.notes, conditionText, view, ...(subtitle ? { subtitle } : {}) });
@@ -75,4 +75,10 @@ export function useResolvedTheme(): Theme {
     root.classList.toggle('system-dark', systemDark);
   }, [pref, systemDark]);
   return theme;
+}
+
+/** Subprocess links across every loaded definition (IMP-04), recomputed when definitions change. */
+export function useSubprocessLinks(): SubprocessLink[] {
+  const defs = useStore((s) => s.definitions);
+  return useMemo(() => linkSubprocesses(defs), [defs]);
 }

@@ -10,7 +10,7 @@ import { temporal } from 'zundo';
 import type { ProcessDefinition } from '@bpmap/model';
 import type { ColumnMap, ImportOutcome } from '@bpmap/importer-xlsx';
 import { emptyOverlay, withoutOrphans, type Orphans, type Overlay, type View } from './overlay.ts';
-import { emptyScenario, pruneScenario, type Answer, type ScenarioState } from '@bpmap/engine-scenario';
+import { emptyScenario, presetAnswersFor, rekeyScenario, withTextKeys, type Answer, type ScenarioState } from '@bpmap/engine-scenario';
 import { importFile } from '../workers/importClient.ts';
 
 export interface ImportReport {
@@ -30,6 +30,9 @@ export type ImportState =
 
 export type ThemePref = 'system' | 'light' | 'dark';
 export type PanelTab = 'step' | 'scenario' | 'health' | 'report';
+
+/** Files per drop (IMP-04: a definition plus its subprocesses). */
+export const MAX_FILES = 20;
 
 export interface RemovedDefinition {
   definition: ProcessDefinition;
@@ -58,6 +61,10 @@ export interface ProjectState {
   listMode: boolean;
   /** The definition just closed, kept for the Undo toast until the next close or restore. */
   lastRemoved: RemovedDefinition | null;
+  /** One-off message about the last multi-file import (e.g. files over the limit). */
+  importNotice: string | null;
+  /** Set when the user opened a subprocess from a calling step, for "← Back" (IMP-04). */
+  cameFrom: { defId: string; stepId: string } | null;
   themePref: ThemePref;
 
   importFiles(files: File[]): Promise<void>;
@@ -66,7 +73,10 @@ export interface ProjectState {
   setActive(id: string): void;
   removeDefinition(id: string): void;
   restoreRemoved(): void;
+  openSubprocess(toId: string, from: { defId: string; stepId: string }): void;
+  backFromSubprocess(): void;
   forgetRemoved(): void;
+  dismissImportNotice(): void;
   select(stepId: string | null): void;
   setPanel(tab: PanelTab): void;
   setThemePref(pref: ThemePref): void;
@@ -74,6 +84,9 @@ export interface ProjectState {
   setNote(stepId: string, note: string): void;
   /** Plain-word rewrite of a condition; key = conditionKey(Workday text). Empty text clears it. */
   setConditionText(key: string, text: string): void;
+  /** Manual layout nudge (VIS-11); 0,0 removes it. One undo step per drag / key press burst. */
+  setNudge(stepId: string, dx: number, dy: number): void;
+  resetNudges(): void;
   setHidden(stepId: string, hidden: boolean): void;
   setLaneName(laneId: string, name: string): void;
   dismissFinding(fingerprint: string, reason: string): void;
@@ -142,6 +155,10 @@ export const useStore = create<ProjectState>()(
         set({ scenarios: { ...get().scenarios, [def]: f(get().scenarios[def] ?? emptyScenario()) } });
       };
 
+      const activeDef = () => {
+        const st = get();
+        return st.definitions.find((d) => d.id === st.activeId);
+      };
       const withOverlay = (key: string, f: (o: Overlay) => Overlay) => {
         const def = get().activeId;
         if (!def) return;
@@ -174,7 +191,8 @@ export const useStore = create<ProjectState>()(
           definitions: exists ? s.definitions.map((d) => (d.id === def.id ? def : d)) : [...s.definitions, def],
           reports: { ...s.reports, [def.id]: { fileName: file.name, stats: outcome.stats, sheets: outcome.sheets, mappingSource: outcome.mappingUsed.source } },
           overlays: s.overlays[def.id] ? s.overlays : { ...s.overlays, [def.id]: emptyOverlay() },
-          scenarios: { ...s.scenarios, [def.id]: pruneScenario(def, s.scenarios[def.id] ?? emptyScenario()) },
+          // re-import: answers, decisions and presets follow their condition text to the new Cn (DEC-052)
+          scenarios: { ...s.scenarios, [def.id]: rekeyScenario(s.definitions.find((d) => d.id === def.id), def, s.scenarios[def.id] ?? emptyScenario()) },
           activeId: def.id,
           selectedStepId: null,
           panel: def.warnings.length ? 'report' : s.panel,
@@ -201,6 +219,8 @@ export const useStore = create<ProjectState>()(
         focusLaneId: null,
         listMode: false,
         lastRemoved: null,
+        cameFrom: null,
+        importNotice: null,
         setFocusLane: (laneId) => set({ focusLaneId: laneId }),
         setListMode: (on) => set({ listMode: on }),
         applyCustomisations(definitionId, incoming, presets, view) {
@@ -214,8 +234,12 @@ export const useStore = create<ProjectState>()(
             laneNames: { ...cur.laneNames, ...incoming.laneNames },
             dismissedFindings: { ...cur.dismissedFindings, ...incoming.dismissedFindings },
             conditionText: { ...cur.conditionText, ...incoming.conditionText },
+            nudges: { ...cur.nudges, ...incoming.nudges },
           };
           const sc = s.scenarios[definitionId] ?? emptyScenario();
+          const target = s.definitions.find((d) => d.id === definitionId);
+          // a colleague's export may number conditions differently: re-derive answers from the text (DEC-052)
+          if (target) presets = presets.map((p) => withTextKeys(target, { ...p, answers: presetAnswersFor(target, p) }));
           const names = new Set(presets.map((p) => p.name.trim().toLowerCase()));
           const kept = sc.presets.filter((p) => !names.has(p.name.trim().toLowerCase()));
           const taken = new Set(kept.map((p) => p.id));
@@ -231,7 +255,10 @@ export const useStore = create<ProjectState>()(
         removeOrphans: (orphans) => withOverlay(`orphans|${Date.now()}`, (o) => withoutOrphans(o, orphans)),
 
         async importFiles(files) {
-          const xs = files.filter(Boolean);
+          // Up to 20 files per drop: a definition plus its subprocesses (IMP-04)
+          const all = files.filter(Boolean);
+          const xs = all.slice(0, MAX_FILES);
+          if (all.length > MAX_FILES) set({ importNotice: `Only ${MAX_FILES} files can be imported at once. ${all.length - MAX_FILES} ${all.length - MAX_FILES === 1 ? 'was' : 'were'} left out: ${all.slice(MAX_FILES).map((f) => f.name).join(', ')}` });
           const [first, ...rest] = xs;
           if (!first) return;
           await runImport(first, new Uint8Array(await first.arrayBuffer()), undefined, rest);
@@ -243,7 +270,13 @@ export const useStore = create<ProjectState>()(
           await runImport(file, st.bytes, { fingerprint: st.outcome.fingerprint, map }, st.queue);
         },
         dismissImportError: () => set({ importState: { status: 'idle' } }),
-        setActive: (id) => set({ activeId: id, selectedStepId: null, focusLaneId: null }),
+        setActive: (id) => set({ activeId: id, selectedStepId: null, focusLaneId: null, cameFrom: null }),
+        openSubprocess: (toId, from) => set({ activeId: toId, selectedStepId: null, focusLaneId: null, cameFrom: from }),
+        backFromSubprocess() {
+          const from = get().cameFrom;
+          if (!from || !get().definitions.some((d) => d.id === from.defId)) return set({ cameFrom: null });
+          set({ activeId: from.defId, selectedStepId: from.stepId, panel: 'step', focusLaneId: null, cameFrom: null });
+        },
         removeDefinition(id) {
           const s = get();
           const index = s.definitions.findIndex((d) => d.id === id);
@@ -279,6 +312,7 @@ export const useStore = create<ProjectState>()(
           );
         },
         forgetRemoved: () => set({ lastRemoved: null }),
+        dismissImportNotice: () => set({ importNotice: null }),
         select: (stepId) => set({ selectedStepId: stepId, ...(stepId ? { panel: 'step' as const } : {}) }),
         setPanel: (panel) => set({ panel }),
         setThemePref(pref) {
@@ -310,6 +344,14 @@ export const useStore = create<ProjectState>()(
             else delete conditionText[key];
             return { ...o, conditionText };
           }),
+        setNudge: (stepId, dx, dy) =>
+          withOverlay(`nudge|${stepId}`, (o) => {
+            const nudges = { ...o.nudges };
+            if (Math.round(dx) || Math.round(dy)) nudges[stepId] = { dx: Math.round(dx), dy: Math.round(dy) };
+            else delete nudges[stepId];
+            return { ...o, nudges };
+          }),
+        resetNudges: () => withOverlay(`nudges-reset|${Date.now()}`, (o) => ({ ...o, nudges: {} })),
         setHidden: (stepId, hidden) =>
           withOverlay(`hidden|${stepId}|${Date.now()}`, (o) => ({ ...o, hidden: hidden ? [...new Set([...o.hidden, stepId])] : o.hidden.filter((x) => x !== stepId) })),
         setLaneName: (laneId, name) =>
@@ -340,13 +382,20 @@ export const useStore = create<ProjectState>()(
         toggleDecision: (conditionId) =>
           withScenario(`decision|${conditionId}|${Date.now()}`, (sc) => ({ ...sc, decisions: sc.decisions.includes(conditionId) ? sc.decisions.filter((d) => d !== conditionId) : [...sc.decisions, conditionId] })),
         resetScenario: () => withScenario(`reset|${Date.now()}`, (sc) => ({ ...sc, answers: {} })),
-        savePreset: (name) =>
-          withScenario(`preset|${Date.now()}`, (sc) => ({ ...sc, presets: [...sc.presets, { id: `p${Date.now().toString(36)}`, name: name.trim() || `Scenario ${sc.presets.length + 1}`, answers: { ...sc.answers } }] })),
-        applyPreset: (id) =>
+        savePreset: (name) => {
+          const def = activeDef();
+          withScenario(`preset|${Date.now()}`, (sc) => {
+            const preset = { id: `p${Date.now().toString(36)}`, name: name.trim() || `Scenario ${sc.presets.length + 1}`, answers: { ...sc.answers } };
+            return { ...sc, presets: [...sc.presets, def ? withTextKeys(def, preset) : preset] };
+          });
+        },
+        applyPreset: (id) => {
+          const def = activeDef();
           withScenario(`apply|${Date.now()}`, (sc) => {
             const p = sc.presets.find((x) => x.id === id);
-            return p ? { ...sc, answers: { ...p.answers } } : sc;
-          }),
+            return p ? { ...sc, answers: def ? presetAnswersFor(def, p) : { ...p.answers } } : sc;
+          });
+        },
         deletePreset: (id) => withScenario(`delpreset|${Date.now()}`, (sc) => ({ ...sc, presets: sc.presets.filter((x) => x.id !== id) })),
         replaceProject: (p) =>
           untracked(() => set({ definitions: p.definitions, overlays: p.overlays, scenarios: p.scenarios ?? {}, views: p.views ?? {}, reports: p.reports ?? {}, activeId: p.definitions[0]?.id ?? null, selectedStepId: null })),

@@ -6,7 +6,7 @@
 import { slug, parseProject, withFreshStageKeys, SCHEMA_VERSION, type ProcessDefinition } from '@bpmap/model';
 import { toSvg, type Scene } from '@bpmap/scene';
 import { isView, normaliseOverlay, type Overlay, type View } from '../../store/overlay.ts';
-import { isScenarioState, type ScenarioState } from '@bpmap/engine-scenario';
+import { isScenarioState, withTextKeys, type ScenarioState } from '@bpmap/engine-scenario';
 
 export const fileBase = (def: ProcessDefinition) => slug(`${def.process} ${def.variant}`) || 'business-process';
 const title = (def: ProcessDefinition) => (def.variant ? `${def.process} (${def.variant})` : def.process);
@@ -134,7 +134,7 @@ export function customisationsBlob(def: ProcessDefinition, overlay: Overlay, sce
     exportedAt: new Date().toISOString(),
     definition: { process: def.process, variant: def.variant },
     overlay,
-    presets: scenario?.presets ?? [],
+    presets: (scenario?.presets ?? []).map((p) => withTextKeys(def, p)), // text keys travel across exports (DEC-052)
     ...(view ? { view } : {}),
   };
   return new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });

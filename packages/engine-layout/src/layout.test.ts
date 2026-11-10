@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFixture } from '@bpmap/fixtures';
 import { importWorkbook } from '@bpmap/importer-xlsx';
 import { buildGraph } from '@bpmap/engine-graph';
-import { layout, type LaidOutNode } from './index.ts';
+import { MAX_NUDGE, layout, type LaidOutNode } from './index.ts';
 
 const r = importWorkbook(readFixture('changeJob'), { importedAt: '2026-11-10T00:00:00.000Z' });
 if (r.status !== 'ok') throw new Error('fixture failed to import');
@@ -86,5 +86,53 @@ describe('decisions and markers on the real Workday layout (DEC-032)', () => {
     expect(LL.markers.end!.cx).toBeGreaterThan(node('v').x + node('v').width);
     expect(node('ba').x).toBeLessThan(node('d').x);
     expect(node('bd').x).toBeLessThan(node('d').x);
+  });
+});
+
+describe('manual nudges (VIS-11)', () => {
+  // a step alone in a non-parallel stage, with a later stage after it
+  const stage = g.stages.findIndex((s, i) => !s.parallel && s.stepIds.length === 1 && i > 0 && i < g.stages.length - 1);
+  const id = g.stages[stage]!.stepIds[0]!;
+  const base = L.nodes.find((n) => n.id === id)!;
+  const laneOf = (res: typeof L, laneId: string) => res.lanes.find((l) => l.id === laneId)!;
+
+  it('no nudges = identical layout; every node reports a zero nudge', () => {
+    expect(layout(g, { nudges: {} })).toEqual(L);
+    expect(L.nodes.every((n) => n.nudge.dx === 0 && n.nudge.dy === 0)).toBe(true);
+  });
+
+  it('down: the step moves and its lane grows, pushing later lanes down; edges follow', () => {
+    const N = layout(g, { nudges: { [id]: { dx: 0, dy: 120 } } });
+    const n = N.nodes.find((x) => x.id === id)!;
+    expect(n.y - base.y).toBe(120);
+    expect(laneOf(N, n.laneId).height).toBeGreaterThan(laneOf(L, n.laneId).height);
+    expect(n.y + n.height).toBeLessThanOrEqual(laneOf(N, n.laneId).y + laneOf(N, n.laneId).height);
+    expect(N.height).toBeGreaterThan(L.height);
+    const into = N.edges.find((e) => e.id === `t-${stage - 1}-${stage}`)!;
+    expect(into.points.at(-1)![1]).toBe(n.y + n.height / 2); // arrives at the moved step's centre
+  });
+
+  it('left/right: the column widens on that side, so the step never enters another stage', () => {
+    for (const dx of [-150, 150]) {
+      const N = layout(g, { nudges: { [id]: { dx, dy: 0 } } });
+      const n = N.nodes.find((x) => x.id === id)!;
+      const st = N.stages[stage]!;
+      expect(n.x).toBeGreaterThanOrEqual(st.x);
+      expect(n.x + n.width).toBeLessThanOrEqual(st.x + st.width);
+      expect(N.stages[stage + 1]!.x - L.stages[stage + 1]!.x).toBe(150); // later stages shift by the added room
+      expect(N.width - L.width).toBe(150);
+    }
+  });
+
+  it('never above the lane top, never beyond MAX_NUDGE', () => {
+    const up = layout(g, { nudges: { [id]: { dx: 0, dy: -500 } } }).nodes.find((x) => x.id === id)!;
+    expect(up.y).toBe(laneOf(L, base.laneId).y + 4);
+    const far = layout(g, { nudges: { [id]: { dx: 99999, dy: 99999 } } }).nodes.find((x) => x.id === id)!;
+    expect(far.nudge).toEqual({ dx: MAX_NUDGE, dy: MAX_NUDGE });
+  });
+
+  it('nudged layouts keep steps from overlapping when moved apart', () => {
+    const N = layout(g, { nudges: { [id]: { dx: 60, dy: 40 } } });
+    for (const a of N.nodes) for (const b of N.nodes) if (a !== b) expect(overlaps(a, b)).toBe(false);
   });
 });

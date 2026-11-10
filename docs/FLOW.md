@@ -8,9 +8,9 @@ Legend: `→` calls / passes data to · `⇢` async (worker message, promise, ti
 
 ## Current work
 
-> **Phase 2 · Increment 2.3 ✅ complete** (DEC-049..051): plain-word conditions, customisations file, Excel export, conditions page/slide and pack cover. 136 unit + 18 e2e tests.
+> **Phase 2 ✅ complete** (Increment 2.4: DEC-052..054): subprocess linking and multi-file import, layout nudges (Arrange), and scenario answers/presets that survive condition renumbering. 149 unit + 21 e2e tests. EXP-09 (account-gated formats) waits for the Phase 3 backend.
 >
-> ⏭ **Increment 2.4** (closes Phase 2): multi-file import with subprocess linking (IMP-04), manual layout nudges (VIS-11), scenario presets keyed by condition text.
+> ⏭ **Phase 3** (per PRD §14): condition-rule and security-policy import (IMP-09/10), test plans (SCN-04/05), definition comparison (CMP-01..04), opt-in AI assist.
 >
 > No path is being modified at the moment.
 
@@ -216,6 +216,17 @@ DefinitionTabs ▸ × → store.removeDefinition (untracked; stash in lastRemove
 Scenario panel ▸ In plain words → store.setConditionText(conditionKey(text), words) → overlay.conditionText
        → deriveDiagram: plainConditions(def.conditions, overlay) → Diagram.conditionText + scene decor
        → condition list / panels / step list / Excel / conditions page show plain words + "Workday: …"
+Import (several files, ≤ MAX_FILES = 20) → store.importFiles → runImport queue (one at a time)
+       → extra files → importNotice banner (App)
+       → per file: rekeyScenario(oldDef, newDef, scenario)   engine-scenario: answers/decisions/presets by condition text
+useSubprocessLinks() → linkSubprocesses(definitions)          @bpmap/model links.ts (exact name → process → task)
+       → Step panel SubprocessLinkRow: Open → store.openSubprocess(toId, {defId, stepId}) → cameFrom
+       → DefinitionTabs: ↳ marker on linked tabs · "← Back" chip → store.backFromSubprocess (re-selects step)
+       → Import tab SubprocessSummary: calls (linked / not loaded) · called by
+Viewer ▸ Arrange: pointer drag (preview translate) → drop → store.setNudge(id, dx, dy) → overlay.nudges
+       | arrow keys on focused step (8 / Shift 32) → setNudge | Reset layout → store.resetNudges
+       → deriveDiagram: layout(graph, { nudges }) → step 4 places node + nudge, lane/column grow
+       → diamonds, bars, gutter edges computed from moved nodes (edges follow automatically)
 Toolbar ▸ Step list → store.setListMode → Workspace renders StepList (table, tbody per stage)
        instead of DiagramViewer; step button → store.select(stepId) → right panel
 ```
