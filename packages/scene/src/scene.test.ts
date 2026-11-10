@@ -71,3 +71,20 @@ describe('executive scene (VW-01)', () => {
     expect(roles).not.toContain('step');
   });
 });
+
+describe('executive captions and header on the real Workday layout (F-01..F-03, DEC-040)', () => {
+  it('keeps "process complete", never truncates "only if", shows effective/due dates', async () => {
+    const { buildExportScene: build, toSvg: svgOf } = await import('./index.ts');
+    const rr = importWorkbook(readFixture('workdayLayout'), { importedAt: 'x' });
+    if (rr.status !== 'ok') throw new Error('fixture');
+    const gg = buildGraph(rr.definition);
+    const ex = build(rr.definition, gg, layout(gg), 'light', { view: 'executive' });
+    const texts = flat(ex.items).filter((i): i is Extract<SceneItem, { t: 'text' }> => i.t === 'text').map((i) => i.text);
+    expect(texts).toContain('✓ Process complete after this step');
+    expect(texts.filter((t) => t.includes('only if') && t.endsWith('…'))).toEqual([]);
+    expect(texts.some((t) => t === 'only if C5, C6, C7 and C8' || t.startsWith('only if C5, C6, C7'))).toBe(true); // full list, not "4 conditions"
+    const header = svgOf(ex, 'x');
+    expect(header).toContain('effective 2026-11-10');
+    expect(header).toContain('overall due 1 Week');
+  });
+});

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFixture } from '@bpmap/fixtures';
 import { importWorkbook } from '@bpmap/importer-xlsx';
-import { isAlwaysFalse, runRules } from './index.ts';
+import { areExclusive, isAlwaysFalse, runRules } from './index.ts';
 
 const load = (name: 'workdayLayout' | 'changeJob') => {
   const r = importWorkbook(readFixture(name), { importedAt: 'x' });
@@ -63,5 +63,22 @@ describe('HC-01..HC-07 (DEC-036)', () => {
     expect(new Set(all.map((f) => f.fingerprint)).size).toBe(all.length);
     expect(runRules(real).map((f) => f.fingerprint)).toEqual(all.map((f) => f.fingerprint));
     expect(all[0]!.severity).toBe('critical'); // sorted by severity
+  });
+});
+
+describe('F-04: no flow findings for steps that never both run (DEC-041)', () => {
+  it('recognises single-negation pairs only', () => {
+    expect(areExclusive('Country is NOT Canada?', 'Country is Canada?')).toBe(true);
+    expect(areExclusive("Worker isn't a manager?", 'Worker is a manager?')).toBe(true);
+    expect(areExclusive('Country is Canada?', 'Country is Canada?')).toBe(false);
+    expect(areExclusive('Pay rate is not hourly?', 'Proposed pay above 20%?')).toBe(false);
+    expect(areExclusive('Not initiated from a job application?', 'Not initiated from a job application?')).toBe(false);
+  });
+
+  it('HC-04 skips t→t1 (mutually exclusive) and s→s1 (never run), keeps genuine pairs', () => {
+    const pairs = byRule('HC-04').map((f) => orders(f.stepIds).join('→'));
+    expect(pairs).not.toContain('t→t1');
+    expect(pairs).not.toContain('s→s1');
+    expect(pairs).toContain('ba→bb');
   });
 });

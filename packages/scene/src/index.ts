@@ -63,9 +63,9 @@ const SKIP_DASH = [5, 3.5];
 const EDGE_SKIP_DASH = [5, 4];
 
 /** "C5 and C6", "C4, C8 and C9"; more than three → "4 conditions" (no ambiguous "+", DEC-032). */
-export function conditionPhrase(input: readonly string[]): string {
+export function conditionPhrase(input: readonly string[], max = 3): string {
   const ids = [...input].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
-  if (ids.length > 3) return `${ids.length} conditions`;
+  if (ids.length > max) return `${ids.length} conditions`;
   if (ids.length <= 1) return ids[0] ?? '';
   return `${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]}`;
 }
@@ -235,8 +235,20 @@ export function buildExecutiveDiagram(def: ProcessDefinition, graph: SemanticGra
   const labels = decor.labels ?? {};
   const textW = EXEC.cardWidth - 2 * EXEC.pad - 14;
   const titleLines = (id: string) => wrapText(stepTitle(graph.steps[id]!.step, labels[id]), textW, 13, 600, 2);
-  const EL = executiveLayout(graph, { cardWidth: EXEC.cardWidth, stepHeight: (id) => titleLines(id).length * EXEC.titleLine + EXEC.caption + EXEC.gap });
+  /**
+   * Caption lines under a step title (F-01/F-02, DEC-040): lane on its own line; the FULL
+   * "only if" list (wrapped to 2 lines, never collapsed to "4 conditions"); completion on its own
+   * line so nothing competes for space.
+   */
+  const captionLines = (id: string): { text: string; tone: 'muted' | 'conditional' | 'complete' }[] => {
+    const gs = graph.steps[id]!;
+    const out: { text: string; tone: 'muted' | 'conditional' | 'complete' }[] = [{ text: wrapText(laneLabel.get(gs.laneId) ?? '', textW, 11, 400, 1)[0] ?? '', tone: 'muted' }];
+    if (gs.conditional) for (const l of wrapText(`only if ${conditionPhrase(gs.openConditionIds, Infinity)}`, textW, 11, 400, 2)) out.push({ text: l, tone: 'conditional' });
+    if (gs.step.complete) out.push({ text: '✓ Process complete after this step', tone: 'complete' });
+    return out;
+  };
   const laneLabel = new Map(graph.lanes.map((l) => [l.id, l.label]));
+  const EL = executiveLayout(graph, { cardWidth: EXEC.cardWidth, stepHeight: (id) => titleLines(id).length * EXEC.titleLine + captionLines(id).length * EXEC.caption + EXEC.gap });
   const items: SceneItem[] = [];
 
   items.push({ t: 'group', role: 'edges', children: EL.edges.map((e): SceneItem => ({ t: 'path', points: e.points, stroke: tk.edge, width: 1.5, arrow: true })) });
@@ -255,9 +267,18 @@ export function buildExecutiveDiagram(def: ProcessDefinition, graph: SemanticGra
       children.push({ t: 'circle', cx: c.x + EXEC.pad + 4, cy: y0 + 9, r: 4, fill: style.bg, stroke: style.border, strokeWidth: 1.25 });
       const lines = titleLines(row.id);
       lines.forEach((l, i) => children.push({ t: 'text', x: c.x + EXEC.pad + 14, y: y0 + 13 + i * EXEC.titleLine, text: l, size: 13, weight: 600, fill: s.text }));
-      const caption = [laneLabel.get(gs.laneId) ?? '', gs.conditional ? `only if ${conditionPhrase(gs.openConditionIds)}` : '', gs.step.complete ? 'process complete' : ''].filter(Boolean).join(' · ');
       const capY = y0 + 13 + lines.length * EXEC.titleLine - 2;
-      children.push({ t: 'text', x: c.x + EXEC.pad + 14, y: capY, text: wrapText(caption, textW, 11, 400, 1)[0] ?? '', size: 11, weight: 400, fill: gs.conditional ? s['on-conditional-subtle'] : s['text-secondary'] });
+      captionLines(row.id).forEach((cl, i) =>
+        children.push({
+          t: 'text',
+          x: c.x + EXEC.pad + 14,
+          y: capY + i * EXEC.caption,
+          text: cl.text,
+          size: 11,
+          weight: cl.tone === 'complete' ? 600 : 400,
+          fill: cl.tone === 'conditional' ? s['on-conditional-subtle'] : cl.tone === 'complete' ? s.success : s['text-secondary'],
+        }),
+      );
     }
     // 'stage-card', not 'step': the canvas skips 'step' groups because React Flow draws those live.
     items.push({ t: 'group', role: 'stage-card', id: `stage-${c.stageIndex}`, children });
@@ -311,7 +332,7 @@ export function buildExportScene(def: ProcessDefinition, graph: SemanticGraph, L
     role: 'header',
     children: [
       { t: 'text', x: M, y: M + 18, text: title, size: 22, weight: 700, fill: s.primary },
-      { t: 'text', x: M, y: M + 40, text: [`${VIEW_NAME[decor.view ?? 'owner']} view`, summaryLine(def, graph), decor.subtitle].filter(Boolean).join(' · '), size: 12, weight: 400, fill: s['text-muted'] },
+      { t: 'text', x: M, y: M + 40, text: [`${VIEW_NAME[decor.view ?? 'owner']} view`, def.meta.effectiveDate && `effective ${def.meta.effectiveDate}`, def.meta.dueDate && `overall due ${def.meta.dueDate}`, summaryLine(def, graph), decor.subtitle].filter(Boolean).join(' · '), size: 12, weight: 400, fill: s['text-muted'] },
     ],
   });
 

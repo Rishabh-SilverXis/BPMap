@@ -297,3 +297,22 @@ Phase 2 ("Parity+") is split in two. **2.1** (this increment) covers views (VW-0
 - **Date:** 2026-11-11 · **Serves:** NFR-QUAL, Architecture §21
 - **Decision:** `tools/oracle/workday_export_oracle.py` re-parses Workday exports with Python's standard library and its own implementation of the rules. Cross-checks compare our model, scenarios and views with it. A local-only Playwright spec (`real-export.local.spec.ts`) drives the real UI against a private file and the oracle's expected counts, and skips when either is absent.
 - **Why:** Golden snapshots only prove the importer is *stable*, not *right*. Both earlier real-file bugs (DEC-026, DEC-027) would have passed our own snapshots. Results are in `docs/testing/TEST_REPORT_2026-11-11.md`: 1,116 scenario × view renders, 70/73 checks, 23/23 edge cases, 4/4 real-UI tests. The 3 failures (F-01..F-03) plus a rule false positive (F-04) are open.
+
+## DEC-040 · Executive captions: one fact per line (fixes F-01, F-02, F-03)
+- **Date:** 2026-11-11 · **Serves:** VW-01, test report F-01..F-03
+- **Decision:** Under each step title, the Executive card now draws separate lines:
+  1. the lane;
+  2. the **full** "only if C5, C6, C7 and C8" list (`conditionPhrase(ids, Infinity)`, wrapped to at most 2 lines; never collapsed to "4 conditions");
+  3. "✓ Process complete after this step" in the success colour.
+
+  Card heights are measured from the same lines. The export header now adds "effective 2026-11-10 · overall due 1 Week" from `def.meta`.
+- **Why:** The single joined caption was cut at one line, so "process complete" vanished in all 224 scenarios where step `o` is visible, and long condition lists became "only if 4…". Separate lines mean no fact competes with another for space. The dates were already parsed (DEC-029) but never shown.
+- **Verified:** oracle cross-check 73/73 (was 70/73). New unit regression test on the real-layout fixture. Visual check on the real file.
+
+## DEC-041 · Flow rules ignore steps that never run and mutually exclusive pairs (fixes F-04)
+- **Date:** 2026-11-11 · **Serves:** HLT-01, test report F-04
+- **Decision:**
+  - HC-04, HC-05 and HC-06 skip steps guarded by a constant-false condition (the HC-16 set).
+  - HC-04 also skips a pair when one step's condition is the single-negation of the other's (`areExclusive`: "Country is NOT Canada?" vs "Country is Canada?", "isn't" vs "is"), because the two steps never both run.
+- **Why:** On the real export, HC-04 reported "HR Administrator acts at s and again at s1" (both can never run) and "Employee As Self acts at t and again at t1" (mutually exclusive by country). Both were false positives that would erode trust in Health.
+- **Limits:** Exclusivity is inferred from condition *names* only. The export doesn't contain rule logic, so complementary rules with different wording (e.g. "Hourly?" vs "Salaried?") are not detected. Revisit when condition-rule import (IMP-09) lands.

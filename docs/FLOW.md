@@ -8,7 +8,7 @@ Legend: `→` calls / passes data to · `⇢` async (worker message, promise, ti
 
 ## Current work
 
-> **Phase 2 · Increment 2.1 ✅ complete** (DEC-034..038): views, scenarios, health rules HC-01..07 with dismissals, Playwright e2e (including network privacy) and CI. 119 unit + 5 e2e tests. Checked in the browser against the real export.
+> **Phase 2 · Increment 2.1 ✅ complete** (DEC-034..041): views, scenarios, health rules HC-01..07 with dismissals, Playwright e2e (including network privacy) and CI. After the real-export test campaign (DEC-039), executive captions (DEC-040) and flow rules (DEC-041) were fixed. 122 unit + 9 e2e tests; oracle cross-check 73/73.
 >
 > ⏭ **Increment 2.2:** PDF / PPTX / draw.io exports (EXP-02..04), packs (PCK-01/03), re-import reconciliation (IMP-06), focus role (VIS-08), screen-reader step list (NFR-A11Y), and moving stored-data validation off the initial bundle (177 of 180 KB).
 >
@@ -122,6 +122,7 @@ Runs on every change of the active definition, its overlay, its scenario, its vi
  │    │     └ header (view · summary · scenario) · legend (per view) · condition list · footer
  │    └ runRules(def)                                      packages/engine-rules (full definition, no scenario)
  │          └ buildGraph(def) → HC-01..07, HC-16 → findings sorted by severity
+                (HC-04/05/06 skip neverRuns(def) steps; HC-04 skips areExclusive pairs, DEC-041)
  ├ <DefinitionTabs/> · <Toolbar/> (view radiogroup → store.setView, undo/redo, export) · <StatusBar/> (scenario summary)
  ├ <DiagramCanvas diagram theme/>                          features/canvas/DiagramCanvas.tsx
  │    ├ nodes: [] in Executive; else layout.nodes + EXPORT_DIAGRAM_OFFSET, data { step, openConditionIds, meta? }

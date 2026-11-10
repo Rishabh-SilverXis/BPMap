@@ -29,12 +29,22 @@
 
 | ID | Severity | Finding | Evidence |
 |---|---|---|---|
-| F-01 | **High** | Executive view loses the "process complete" marker when the caption also has "only if …" | Missing in 224 of 224 scenarios where step `o` is visible |
-| F-02 | Medium | Executive "only if" captions are cut to one line ("only if 4…", "only if C16 an…") | 6 distinct truncated captions on the real file |
-| F-03 | Medium | Export header omits effective date and overall due date (already parsed) | Header string check |
-| F-04 | Medium | HC-04 false positives: pairs steps whose conditions are mutually exclusive (`t` "Country is NOT …" vs `t1` "Country is …") and steps that can never run (`s` → `s1`, both HC-16) | Health output on the real file |
+| F-01 | ~~High~~ **Fixed** (DEC-040) | Executive view loses the "process complete" marker when the caption also has "only if …" | Missing in 224 of 224 scenarios where step `o` is visible |
+| F-02 | ~~Medium~~ **Fixed** (DEC-040) | Executive "only if" captions are cut to one line ("only if 4…", "only if C16 an…") | 6 distinct truncated captions on the real file |
+| F-03 | ~~Medium~~ **Fixed** (DEC-040) | Export header omits effective date and overall due date (already parsed) | Header string check |
+| F-04 | ~~Medium~~ **Fixed** (DEC-041) | HC-04 false positives: pairs steps whose conditions are mutually exclusive (`t` "Country is NOT …" vs `t1` "Country is …") and steps that can never run (`s` → `s1`, both HC-16) | Health output on the real file |
 | F-05 | Low | HC-02 and HC-03 together produce many findings on real data (12 warnings, 11 info) | Already mitigated by the badge counting only critical + warning (DEC-037); consider an "export lacks due dates/alternates broadly" summary |
 | F-06 | Info | Two test-code bugs found while building the suites (ambiguous Playwright names "No"/"Not set" and "C1"/"C10") | Fixed with `exact: true` |
+
+## 3b. Re-test after fixes (same day)
+
+| Suite | Before | After |
+|---|---|---|
+| Oracle cross-check (1,116 renders) | 70/73 | **73/73** |
+| Unit tests | 119 | **122** (new regressions for F-01..F-04) |
+| Edge cases | 23/23 | 23/23 |
+| Playwright (5 CI + 4 real-file) | 9/9 | 9/9 |
+| HC-04 on the real export | 8 pairs incl. `s→s1`, `t→t1` | 6 genuine pairs |
 
 ## 4. Reproduce
 

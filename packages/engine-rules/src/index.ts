@@ -74,6 +74,30 @@ export const HC16_ALWAYS_FALSE: Rule = {
 /* -------------------------------------------------------------- HC-01..HC-07 (PRD §13, DEC-036) */
 
 const isPersonStep = (s: Step) => !SYSTEM_KINDS.has(s.kind) && s.kind !== 'initiation';
+
+/** Steps guarded by a constant-false condition never run, so flow rules must ignore them (F-04, DEC-041). */
+function neverRuns(def: ProcessDefinition): Set<string> {
+  const dead = new Set(def.conditions.filter((c) => isAlwaysFalse(c.text)).map((c) => c.id));
+  return new Set(def.steps.filter((s) => s.conditionIds.some((c) => dead.has(c))).map((s) => s.id));
+}
+
+const norm = (t: string) => ` ${t.toLowerCase().replace(/[?.!]+$/g, '').replace(/[^a-z0-9= ]+/g, ' ').replace(/\s+/g, ' ').trim()} `;
+/**
+ * Two condition names are mutually exclusive when one is the other with a single "not" / "is not" /
+ * "isn't" negation (e.g. "Country is NOT Canada?" vs "Country is Canada?"). Name-based only: the
+ * export has no rule logic, so anything subtler is not inferred.
+ */
+export function areExclusive(a: string, b: string): boolean {
+  const [x, y] = [norm(a).replace(/ isn t /g, ' is not '), norm(b).replace(/ isn t /g, ' is not ')];
+  const strip = (t: string) => t.replace(/ not /g, ' ');
+  const negations = (t: string) => (t.match(/ not /g) ?? []).length;
+  return x !== y && strip(x) === strip(y) && Math.abs(negations(x) - negations(y)) === 1;
+}
+
+function exclusiveSteps(def: ProcessDefinition, a: Step, b: Step): boolean {
+  const text = (id: string) => def.conditions.find((c) => c.id === id)?.text ?? '';
+  return a.conditionIds.some((ca) => b.conditionIds.some((cb) => areExclusive(text(ca), text(cb))));
+}
 const isApproval = (s: Step) => APPROVAL_KINDS.has(s.kind);
 const where = (s: Step) => `step ${s.order} (${s.groups[0] ?? 'no group'})`;
 /** A rule that needs a column skips itself when the export has no value for it anywhere. */
@@ -131,14 +155,16 @@ export const HC04_SERIAL_SAME_GROUP: Rule = {
   id: 'HC-04',
   title: 'Same group acts in consecutive stages',
   severity: 'info',
-  evaluate({ graph }) {
+  evaluate({ def, graph }) {
     const out: Finding[] = [];
+    const dead = neverRuns(def);
     graph.stages.forEach((st, i) => {
       const next = graph.stages[i + 1];
       if (!next || st.stepIds.length !== 1 || next.stepIds.length !== 1) return;
       const a = graph.steps[st.stepIds[0]!]!.step;
       const b = graph.steps[next.stepIds[0]!]!.step;
       if (!isPersonStep(a) || !isPersonStep(b) || !a.groups[0] || a.groups[0] !== b.groups[0]) return;
+      if (dead.has(a.id) || dead.has(b.id) || exclusiveSteps(def, a, b)) return; // never both run (F-04)
       out.push({
         ruleId: 'HC-04', severity: 'info', title: this.title, stepIds: [a.id, b.id], fingerprint: fp('HC-04', a.id, b.id),
         message: `${a.groups[0]} acts at step ${a.order} and again at step ${b.order}, one after the other.`,
@@ -153,13 +179,14 @@ export const HC05_TASK_PILEUP: Rule = {
   id: 'HC-05',
   title: 'One group gets several tasks at once',
   severity: 'info',
-  evaluate({ graph, settings }) {
+  evaluate({ def, graph, settings }) {
     const out: Finding[] = [];
+    const dead = neverRuns(def);
     for (const st of graph.stages) {
       const byGroup = new Map<string, Step[]>();
       for (const id of st.stepIds) {
         const s = graph.steps[id]!.step;
-        if (!isPersonStep(s) || !s.groups[0]) continue;
+        if (!isPersonStep(s) || !s.groups[0] || dead.has(s.id)) continue;
         byGroup.set(s.groups[0], [...(byGroup.get(s.groups[0]) ?? []), s]);
       }
       for (const [group, steps] of byGroup) {
@@ -179,8 +206,9 @@ export const HC06_LONG_APPROVAL_CHAIN: Rule = {
   id: 'HC-06',
   title: 'Long serial approval chain',
   severity: 'warning',
-  evaluate({ graph, settings }) {
+  evaluate({ def, graph, settings }) {
     const out: Finding[] = [];
+    const dead = neverRuns(def);
     let run: Step[] = [];
     const flush = () => {
       if (run.length > settings.maxSerialApprovals)
@@ -193,6 +221,7 @@ export const HC06_LONG_APPROVAL_CHAIN: Rule = {
     };
     for (const st of graph.stages) {
       const steps = st.stepIds.map((id) => graph.steps[id]!.step);
+      if (steps.every((x) => dead.has(x.id))) continue; // a stage that never runs doesn't break or extend a chain
       if (steps.length === 1 && isApproval(steps[0]!)) run.push(steps[0]!);
       else flush();
     }
