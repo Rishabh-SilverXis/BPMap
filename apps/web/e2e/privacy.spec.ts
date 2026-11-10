@@ -22,7 +22,7 @@ test('no tenant data leaves the browser', async ({ page, baseURL }) => {
 
   await freshApp(page);
   await importFile(page, 'change-job-workday-layout.xlsx');
-  await expect(page.locator('.react-flow__node')).toHaveCount(26);
+  await expect(page.locator('[data-testid=step]')).toHaveCount(26);
 
   for (const view of ['Configurator', 'Executive', 'Process owner']) await page.getByRole('radio', { name: view, exact: true }).click();
   await page.getByRole('tab', { name: /Scenario/ }).click();

@@ -8,7 +8,7 @@ Legend: `→` calls / passes data to · `⇢` async (worker message, promise, ti
 
 ## Current work
 
-> **Phase 2 · Increment 2.1 ✅ complete** (DEC-034..041): views, scenarios, health rules HC-01..07 with dismissals, Playwright e2e (including network privacy) and CI. After the real-export test campaign (DEC-039), executive captions (DEC-040) and flow rules (DEC-041) were fixed. 122 unit + 9 e2e tests; oracle cross-check 73/73.
+> **Phase 2 · Increment 2.1 ✅ complete** (DEC-034..042, incl. the scrolling viewer with a frozen lane column): views, scenarios, health rules HC-01..07 with dismissals, Playwright e2e (including network privacy) and CI. After the real-export test campaign (DEC-039), executive captions (DEC-040) and flow rules (DEC-041) were fixed. 122 unit + 9 e2e tests; oracle cross-check 73/73.
 >
 > ⏭ **Increment 2.2:** PDF / PPTX / draw.io exports (EXP-02..04), packs (PCK-01/03), re-import reconciliation (IMP-06), focus role (VIS-08), screen-reader step list (NFR-A11Y), and moving stored-data validation off the initial bundle (177 of 180 KB).
 >
@@ -124,10 +124,14 @@ Runs on every change of the active definition, its overlay, its scenario, its vi
  │          └ buildGraph(def) → HC-01..07, HC-16 → findings sorted by severity
                 (HC-04/05/06 skip neverRuns(def) steps; HC-04 skips areExclusive pairs, DEC-041)
  ├ <DefinitionTabs/> · <Toolbar/> (view radiogroup → store.setView, undo/redo, export) · <StatusBar/> (scenario summary)
- ├ <DiagramCanvas diagram theme/>                          features/canvas/DiagramCanvas.tsx
- │    ├ nodes: [] in Executive; else layout.nodes + EXPORT_DIAGRAM_OFFSET, data { step, openConditionIds, meta? }
- │    ├ <ReactFlow key={def|view} onInit → fitScene()>; <ViewportPortal><SceneSvg skip={['step']}/>
- │    └ selection: onNodesChange('select') / onPaneClick → store.select
+ ├ <DiagramViewer diagram theme/>                          features/canvas/DiagramViewer.tsx (DEC-042)
+ │    ├ scroll container (overflow:auto, ResizeObserver) → zoom: user | fitHeight/fitWidth clamped 60–100%
+ │    ├ sized box (scene × zoom)
+ │    │    ├ sticky lane column: translate(laneHeaderItems(lane)) at the scene's own coordinates   (not in Executive)
+ │    │    └ scaled layer: <SceneSvg skip={['step']}/> + <StepNode> buttons at node + EXPORT_DIAGRAM_OFFSET
+ │    ├ zoom toolbar (−/+, 100%, Fit height, Fit width); Ctrl/⌘ + wheel → zoomTo(z, cursor) keeps the point under the cursor
+ │    └ selection: StepNode onClick → store.select(id); background click → select(null);
+ │                 selectedStepId change → scrollIntoView(center)
  └ <RightPanel diagram/>                                   features/panels/RightPanel.tsx
       ├ Step     → details, validations, notifications, conditions, Customise (§4)
       ├ Scenario → ScenarioPanel: setAnswer · toggleDecision · reset · save/apply/delete preset (§4)

@@ -578,7 +578,7 @@ The file is plain JSON (optionally gzipped as `.bpmap`), and loading it runs mig
 
 ## 15. Rendering (canvas)
 
-- **React Flow v12** with custom node types per `NodeKind` (Design System §10). Lanes and stage headers are rendered as a **background layer** (not nodes) so they don't take part in selection or virtualisation.
+- **Scroll viewer** (DEC-042): the export scene is the background; steps are absolutely-positioned buttons at the same coordinates; the lane-name column is `position: sticky` so it stays visible while scrolling. (Originally React Flow v12; replaced because free panning hurt readability.)
 - **Positions come from the layout engine.** Drag-to-nudge writes `overlay.nudges`, and the layout re-applies nudges after placement.
 - **Performance:** `onlyRenderVisibleElements`, `memo` on all nodes, stable `nodeTypes`, level-of-detail switching by zoom (Design System §10.5) via a zoom selector that updates only at the threshold boundaries.
 - **Accessibility:** a parallel `StepList` (treegrid) is built from the same view model. Keyboard navigation moves selection along stage order (Design System §14).

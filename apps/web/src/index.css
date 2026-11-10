@@ -25,20 +25,9 @@
   }
 }
 
-/* Canvas: the scene background sits under the React Flow nodes (DEC-014). */
-.react-flow__viewport-portal {
-  z-index: 0;
-}
-.react-flow__nodes {
-  z-index: 1;
-}
-.react-flow__node.selected .bpm-step,
-.react-flow__node:focus-visible .bpm-step {
+/* Diagram viewer (DEC-042): selected / focused step ring. */
+.bpm-step.is-selected,
+.bpm-step:focus-visible {
   box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-focus);
-}
-.react-flow__node:focus-visible {
-  outline: none;
-}
-.react-flow__attribution {
-  display: none; /* React Flow's MIT licence allows this; attribution is in the About text */
+  z-index: 10;
 }

@@ -316,3 +316,21 @@ Phase 2 ("Parity+") is split in two. **2.1** (this increment) covers views (VW-0
   - HC-04 also skips a pair when one step's condition is the single-negation of the other's (`areExclusive`: "Country is NOT Canada?" vs "Country is Canada?", "isn't" vs "is"), because the two steps never both run.
 - **Why:** On the real export, HC-04 reported "HR Administrator acts at s and again at s1" (both can never run) and "Employee As Self acts at t and again at t1" (mutually exclusive by country). Both were false positives that would erode trust in Health.
 - **Limits:** Exclusivity is inferred from condition *names* only. The export doesn't contain rule logic, so complementary rules with different wording (e.g. "Hourly?" vs "Salaried?") are not detected. Revisit when condition-rule import (IMP-09) lands.
+
+## DEC-042 · Replace the pan/zoom canvas with a scrolling viewer and a frozen lane column
+- **Date:** 2026-11-11 · **Serves:** user request ("fixed canvas, scroll, first column frozen"), VIS-07, NFR-A11Y. Supersedes "React Flow (keep)" in Architecture §11.2 and §15.
+- **Decision:**
+  - `DiagramViewer` puts the scene at a **fixed zoom** inside a native `overflow: auto` container. You scroll with the wheel, trackpad, scrollbars or the keyboard.
+  - The **lane-name column is `position: sticky; left: 0`**, drawn with the same `laneHeaderItems` as the scene at the same coordinates. At scroll 0 it sits exactly over the scene's headers; when scrolled it stays pinned, with a shadow.
+  - **Zoom:** −/+ steps (30–200%), click the percentage for 100%, "Fit height" / "Fit width", and Ctrl/⌘ + wheel (or pinch) zooms around the cursor. The default is fit-height for swimlanes and fit-width for Executive, clamped to **60–100%** so text stays readable.
+  - Steps are focusable `<button>`s (`data-testid="step"`, `aria-pressed`), and "Show step" scrolls the selected step to the centre.
+  - **React Flow is removed** (dependency, provider, CSS) along with its minimap.
+- **Why:** In React Flow, wide processes (26 stages ≈ 6,800 px) opened fitted to a tiny scale and had to be dragged around. You lost track of which lane you were in. Steps are never dragged or connected (the layout is deterministic), so the library only added free panning, which is exactly what hurt readability.
+- **Results:**
+  - Workspace chunk **65 KB → 13 KB** gzip; CSS 8.2 → 6.4 KB.
+  - Tests: 122 unit, 10 e2e (incl. a new viewer test: frozen column at the left edge after scrolling 1,500 px; zoom controls).
+  - Browser-verified on the real export: frozen lanes after scrolling 1,900 px; Ctrl+wheel 100% → 165% while plain wheel scrolls; Show step centres step `s`.
+- **Consequences:**
+  - Stage headers ("Step k") scroll away vertically. A frozen top row is a possible follow-up.
+  - Free-form node dragging (VIS-11 nudges) will need its own pointer handling when it's built.
+  - Architecture §11.2/§15 are updated to match.

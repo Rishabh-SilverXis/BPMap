@@ -18,7 +18,6 @@
     "@bpmap/model": "*",
     "@bpmap/scene": "*",
     "@fontsource-variable/inter": "^5.0.0",
-    "@xyflow/react": "^12.0.0",
     "clsx": "^2.0.0",
     "comlink": "^4.0.0",
     "dexie": "^4.0.0",

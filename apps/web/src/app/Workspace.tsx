@@ -3,7 +3,6 @@
  * Lazy-loaded by App so the import screen ships without React Flow and the engines (Architecture §23, DEC-022).
  */
 import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { ReactFlowProvider } from '@xyflow/react';
 import { Undo2, Redo2, Download, Copy, FolderOpen, X, Check, Loader2, Plus, ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
 import { useStore as useZustand } from 'zustand';
@@ -13,7 +12,7 @@ import { useActiveDefinition, useActiveOverlay, useActiveScenario, useActiveView
 import type { View } from '../store/overlay.ts';
 import { useDiagram, type Diagram } from './derive.ts';
 import { DropZone } from '../features/import/ImportScreen.tsx';
-import { DiagramCanvas } from '../features/canvas/DiagramCanvas.tsx';
+import { DiagramViewer } from '../features/canvas/DiagramViewer.tsx';
 import { RightPanel } from '../features/panels/RightPanel.tsx';
 import { copyPng, download, fileBase, pngBlob, projectBlob, readProjectFile, svgBlob } from '../features/export/exporters.ts';
 
@@ -32,9 +31,7 @@ export default function Workspace({ theme, onToast }: { theme: Theme; onToast: (
       <Toolbar diagram={diagram} onToast={onToast} />
       <div className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1 bg-bg">
-          <ReactFlowProvider>
-            <DiagramCanvas diagram={diagram} theme={theme} />
-          </ReactFlowProvider>
+          <DiagramViewer diagram={diagram} theme={theme} />
         </div>
         <div className="hidden lg:block">
           <RightPanel diagram={diagram} />

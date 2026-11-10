@@ -109,6 +109,20 @@ export function clampMeta(lines: string[], max = 4): string[] {
   return lines.length <= max ? lines : [...lines.slice(0, max - 1), `+${lines.length - max + 1} more`];
 }
 
+/** Width of the lane-name column (diagram coordinates). The viewer freezes this column (DEC-042). */
+export const LANE_HEADER_WIDTH = 136;
+
+/** The lane-name cell for one lane: shared by the diagram scene and the viewer's frozen column. */
+export function laneHeaderItems(lane: { y: number; height: number; label: string; system: boolean }, theme: Theme = 'light'): SceneItem[] {
+  const tk = nodeTokens(theme);
+  const header = wrapText(lane.label, LANE_HEADER_WIDTH - 16, canvasType.laneHeader.size, 600, 3);
+  const y0 = lane.y + lane.height / 2 - ((header.length - 1) * canvasType.laneHeader.line) / 2 + 4;
+  return [
+    { t: 'rect', x: 0, y: lane.y, w: LANE_HEADER_WIDTH, h: lane.height, fill: lane.system ? tk.laneHeader.systemBg : tk.laneHeader.bg, stroke: tk.lane.line, strokeWidth: 1 },
+    ...header.map((line, j): SceneItem => ({ t: 'text', x: 12, y: y0 + j * canvasType.laneHeader.line, text: line, size: canvasType.laneHeader.size, weight: 600, fill: tk.laneHeader.text })),
+  ];
+}
+
 export function buildDiagramScene(def: ProcessDefinition, graph: SemanticGraph, L: LayoutResult, theme: Theme = 'light', decor: SceneDecor = {}): Scene {
   const labels = decor.labels ?? {};
   const notes = decor.notes ?? {};
@@ -120,15 +134,10 @@ export function buildDiagramScene(def: ProcessDefinition, graph: SemanticGraph, 
   items.push({
     t: 'group',
     role: 'lanes',
-    children: L.lanes.flatMap((lane, i): SceneItem[] => {
-      const header = wrapText(lane.label, 120, canvasType.laneHeader.size, 600, 3);
-      const y0 = lane.y + lane.height / 2 - ((header.length - 1) * canvasType.laneHeader.line) / 2 + 4;
-      return [
-        { t: 'rect', x: 0, y: lane.y, w: L.width, h: lane.height, fill: i % 2 ? tk.lane.bgAlt : tk.lane.bg, stroke: tk.lane.line, strokeWidth: 1 },
-        { t: 'rect', x: 0, y: lane.y, w: 136, h: lane.height, fill: lane.system ? tk.laneHeader.systemBg : tk.laneHeader.bg, stroke: tk.lane.line, strokeWidth: 1 },
-        ...header.map((line, j): SceneItem => ({ t: 'text', x: 12, y: y0 + j * canvasType.laneHeader.line, text: line, size: canvasType.laneHeader.size, weight: 600, fill: tk.laneHeader.text })),
-      ];
-    }),
+    children: L.lanes.flatMap((lane, i): SceneItem[] => [
+      { t: 'rect', x: 0, y: lane.y, w: L.width, h: lane.height, fill: i % 2 ? tk.lane.bgAlt : tk.lane.bg, stroke: tk.lane.line, strokeWidth: 1 },
+      ...laneHeaderItems(lane, theme),
+    ]),
   });
 
   items.push({
@@ -288,7 +297,7 @@ export function buildExecutiveDiagram(def: ProcessDefinition, graph: SemanticGra
 
 /* ------------------------------------------------------------------ export wrapper */
 
-function translate(items: SceneItem[], dx: number, dy: number): SceneItem[] {
+export function translate(items: SceneItem[], dx: number, dy: number): SceneItem[] {
   return items.map((it): SceneItem => {
     switch (it.t) {
       case 'rect': return { ...it, x: it.x + dx, y: it.y + dy };
