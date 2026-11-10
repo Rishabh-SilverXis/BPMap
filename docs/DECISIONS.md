@@ -292,3 +292,8 @@ Phase 2 ("Parity+") is split in two. **2.1** (this increment) covers views (VW-0
 - **Why:** The privacy promise is the product's main differentiator (PRD §2.2), so it must be enforced by a test, not by a manual check. Using the installed Chrome avoids a large browser download on every machine.
 - **Results:** 5/5 e2e tests pass locally. The first run failed in 2 tests because of an ambiguous test locator (`'No'` also matched "**No**t set"), fixed with `exact: true`.
 - **Consequences:** Actions are pinned to major tags (`@v4`); pinning to commit SHAs is a follow-up once Renovate is set up. Bundle check: initial JS is 169 KB gzip + 8 KB CSS = **177 KB of the 180 KB budget**. Increment 2.2 must move the zod validation of stored data off the initial chunk before adding more to it.
+
+## DEC-039 · Verify against an independent oracle, not against ourselves
+- **Date:** 2026-11-11 · **Serves:** NFR-QUAL, Architecture §21
+- **Decision:** `tools/oracle/workday_export_oracle.py` re-parses Workday exports with Python's standard library and its own implementation of the rules. Cross-checks compare our model, scenarios and views with it. A local-only Playwright spec (`real-export.local.spec.ts`) drives the real UI against a private file and the oracle's expected counts, and skips when either is absent.
+- **Why:** Golden snapshots only prove the importer is *stable*, not *right*. Both earlier real-file bugs (DEC-026, DEC-027) would have passed our own snapshots. Results are in `docs/testing/TEST_REPORT_2026-11-11.md`: 1,116 scenario × view renders, 70/73 checks, 23/23 edge cases, 4/4 real-UI tests. The 3 failures (F-01..F-03) plus a rule false positive (F-04) are open.

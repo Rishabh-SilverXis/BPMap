@@ -186,6 +186,8 @@ npm run e2e → playwright.config.ts → webServer: npm run build && npm run pre
         privacy.spec.ts: page.on('request') → assert same-origin, no bodies, no CSP violations (NFR-PRIV-01)
         flows.spec.ts:   order + diamonds · scenario skip/reset · views · dismiss → reload → restore
 .github/workflows/ci.yml → npm ci → typecheck → test → build + secret scan of dist → e2e (traces on failure)
+npm run oracle -- <export.xlsx> → tools/oracle (stdlib Python) → expected.json; compared with our model,
+   scenarios and views; real-export.local.spec.ts drives the UI with the oracle's counts (local only, DEC-039)
 ```
 
 ---
