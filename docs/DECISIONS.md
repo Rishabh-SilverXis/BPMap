@@ -380,3 +380,18 @@ Phase 2 ("Parity+") is split in two. **2.1** (this increment) covers views (VW-0
   - **Step list:** A toggle replaces the diagram with a semantic `<table>`: one `<tbody>` per stage, row headers "order · letter", and columns for type, who, runs only if, and due. Step names are buttons that select the step, the same as clicking it in the diagram.
 - **Why:** Silently losing someone's notes after a re-import is the worst trust failure for this tool, and keeping them invisibly is almost as bad. A diagram is unusable with a screen reader, so the table is the equivalent view, not an afterthought.
 - **Tests:** e2e: focus dims (roles − 1) lanes; the step list has 26 stages in Workday order; re-import with the v2 fixture (step `o` removed) shows the orphaned note, and Remove clears it. New fixture: `change-job-workday-layout-v2.xlsx`.
+
+## DEC-048 · Close without a confirm dialog (Undo instead); focus scrolls to the role; pre-bundle export libraries in dev
+- **Date:** 2026-11-11 · **Serves:** user feedback on Increment 2.2, VIS-08, EXP-02..04
+- **Close:**
+  - The × on a definition tab used `window.confirm()`. Embedded browsers (including the desktop app's preview pane) can suppress native dialogs, and then `confirm()` returns false, so the button silently did nothing.
+  - Now × closes immediately. The definition, its overlay, report, scenario and view are kept in `lastRemoved`, and a toast offers **Undo** for 10 s (`restoreRemoved` puts it back at the same tab position).
+  - Both changes are `untracked`, so they don't enter the customisation undo history.
+  - Why: an undoable action needs no confirmation, and Undo is faster and works everywhere.
+- **Focus:** choosing a role scrolls (smoothly) so that role's first step, in reading order, sits just right of the frozen lane column, with its lane vertically centred. A **‹ n / N ›** stepper then walks through that role's steps; each one is selected, centred, and shown in the Step panel. The scroll fires only when the role changes, not on later zooms.
+  - Why: dimming alone left users hunting for a lane that might start 3,000 px to the right, which defeats the feature.
+- **Exports in dev:** the export libraries are imported lazily (DEC-044), so Vite's dev server only discovered them on the first click. That triggered a dependency re-optimisation, which (a) invalidates modules the page already loaded, causing "Failed to fetch dynamically imported module", and (b) failed outright here because a stale cache still listed the removed `@xyflow/react`.
+  - Fix: `optimizeDeps.include: ['jspdf', 'svg2pdf.js', 'pptxgenjs']` pre-bundles them at startup.
+  - The production build was never affected, which is why the e2e suite (run on `vite preview`) passed.
+  - Lesson: verify new lazy dependencies on the dev server too, not only on the build.
+- **Tests:** e2e +2 (focus scrolls to Assign Pay Group and the stepper selects it; close → toast → Undo restores the note → close → reload stays closed). 16 e2e tests in total. Dev-server check: PDF, PowerPoint and draw.io each downloaded.

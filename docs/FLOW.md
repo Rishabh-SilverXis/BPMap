@@ -8,7 +8,7 @@ Legend: `→` calls / passes data to · `⇢` async (worker message, promise, ti
 
 ## Current work
 
-> **Phase 2 · Increment 2.2 ✅ complete** (DEC-044..047): PDF / PowerPoint / draw.io exports and packs, persistence split off the entry chunk (169 → 81 KB gzip), re-import reconciliation of orphaned customisations, focus a role, accessible step list. 128 unit + 14 e2e tests.
+> **Phase 2 · Increment 2.2 ✅ complete** (DEC-044..048): PDF / PowerPoint / draw.io exports and packs, persistence split off the entry chunk (169 → 81 KB gzip), re-import reconciliation of orphaned customisations, focus a role, accessible step list. 128 unit + 16 e2e tests. Follow-up fixes (DEC-048): close with Undo, focus scrolls to the role, export libraries pre-bundled in dev.
 >
 > ⏭ **Increment 2.3** (per PRD): condition-rule import (IMP-09), frozen stage-header row, comparison of two definitions.
 >
@@ -200,6 +200,10 @@ importFile(same definition) → store.addDefinition (replaces by process+variant
        → withOverlay(...) → withoutOrphans (undoable)
 Toolbar ▸ Focus on a role → store.setFocusLane(id) → DiagramViewer: dimmed-lane bands over other
        lanes + steps whose laneId ≠ focus at opacity 0.3 (setActive resets focus)
+       → effect (on focus change only) → scroller.scrollTo(first step of lane, right of frozen column)
+       → Toolbar ‹ › stepper: roleSteps (lane nodes by x, y) → store.select(id) → viewer centres it
+DefinitionTabs ▸ × → store.removeDefinition (untracked; stash in lastRemoved; clear undo history)
+       → App toast "Closed … · Undo" (10 s) → store.restoreRemoved (same tab index) | forgetRemoved
 Toolbar ▸ Step list → store.setListMode → Workspace renders StepList (table, tbody per stage)
        instead of DiagramViewer; step button → store.select(stepId) → right panel
 ```

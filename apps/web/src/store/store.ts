@@ -31,6 +31,16 @@ export type ImportState =
 export type ThemePref = 'system' | 'light' | 'dark';
 export type PanelTab = 'step' | 'scenario' | 'health' | 'report';
 
+export interface RemovedDefinition {
+  definition: ProcessDefinition;
+  index: number;
+  wasActive: boolean;
+  overlay?: Overlay;
+  report?: ImportReport;
+  scenario?: ProjectState['scenarios'][string];
+  view?: ProjectState['views'][string];
+}
+
 export interface ProjectState {
   definitions: ProcessDefinition[];
   reports: Record<string, ImportReport>;
@@ -46,6 +56,8 @@ export interface ProjectState {
   /** Session-only UI: focus one lane (VIS-08) and the accessible step-list view (NFR-A11Y). */
   focusLaneId: string | null;
   listMode: boolean;
+  /** The definition just closed, kept for the Undo toast until the next close or restore. */
+  lastRemoved: RemovedDefinition | null;
   themePref: ThemePref;
 
   importFiles(files: File[]): Promise<void>;
@@ -53,6 +65,8 @@ export interface ProjectState {
   dismissImportError(): void;
   setActive(id: string): void;
   removeDefinition(id: string): void;
+  restoreRemoved(): void;
+  forgetRemoved(): void;
   select(stepId: string | null): void;
   setPanel(tab: PanelTab): void;
   setThemePref(pref: ThemePref): void;
@@ -179,6 +193,7 @@ export const useStore = create<ProjectState>()(
         themePref: readThemePref(),
         focusLaneId: null,
         listMode: false,
+        lastRemoved: null,
         setFocusLane: (laneId) => set({ focusLaneId: laneId }),
         setListMode: (on) => set({ listMode: on }),
         removeOrphans: (orphans) => withOverlay(`orphans|${Date.now()}`, (o) => withoutOrphans(o, orphans)),
@@ -198,15 +213,40 @@ export const useStore = create<ProjectState>()(
         dismissImportError: () => set({ importState: { status: 'idle' } }),
         setActive: (id) => set({ activeId: id, selectedStepId: null, focusLaneId: null }),
         removeDefinition(id) {
-          useStore.temporal.getState().clear(); // undo history refers to the removed definition
           const s = get();
+          const index = s.definitions.findIndex((d) => d.id === id);
+          if (index < 0) return;
           const definitions = s.definitions.filter((d) => d.id !== id);
-          const { [id]: _o, ...overlays } = s.overlays;
-          const { [id]: _r, ...reports } = s.reports;
-          const { [id]: _s, ...scenarios } = s.scenarios;
-          const { [id]: _v, ...views } = s.views;
-          set({ definitions, overlays, reports, scenarios, views, activeId: s.activeId === id ? (definitions[0]?.id ?? null) : s.activeId, selectedStepId: null });
+          const { [id]: overlay, ...overlays } = s.overlays;
+          const { [id]: report, ...reports } = s.reports;
+          const { [id]: scenario, ...scenarios } = s.scenarios;
+          const { [id]: view, ...views } = s.views;
+          const lastRemoved: RemovedDefinition = { definition: s.definitions[index]!, index, wasActive: s.activeId === id, overlay, report, scenario, view };
+          untracked(() =>
+            set({ definitions, overlays, reports, scenarios, views, lastRemoved, activeId: s.activeId === id ? (definitions[Math.min(index, definitions.length - 1)]?.id ?? null) : s.activeId, selectedStepId: null, focusLaneId: null }),
+          );
+          useStore.temporal.getState().clear(); // undo history refers to the removed definition
         },
+        restoreRemoved() {
+          const s = get();
+          const r = s.lastRemoved;
+          if (!r || s.definitions.some((d) => d.id === r.definition.id)) return set({ lastRemoved: null });
+          const definitions = [...s.definitions];
+          definitions.splice(Math.min(r.index, definitions.length), 0, r.definition);
+          const id = r.definition.id;
+          untracked(() =>
+            set({
+              definitions,
+              overlays: r.overlay ? { ...s.overlays, [id]: r.overlay } : s.overlays,
+              reports: r.report ? { ...s.reports, [id]: r.report } : s.reports,
+              scenarios: r.scenario ? { ...s.scenarios, [id]: r.scenario } : s.scenarios,
+              views: r.view ? { ...s.views, [id]: r.view } : s.views,
+              activeId: r.wasActive || !s.activeId ? id : s.activeId,
+              lastRemoved: null,
+            }),
+          );
+        },
+        forgetRemoved: () => set({ lastRemoved: null }),
         select: (stepId) => set({ selectedStepId: stepId, ...(stepId ? { panel: 'step' as const } : {}) }),
         setPanel: (panel) => set({ panel }),
         setThemePref(pref) {

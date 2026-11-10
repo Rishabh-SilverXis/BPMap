@@ -129,6 +129,22 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: The
 
   // Frozen lane column: background strip + the same lane-name cells as the scene.
   const frozenWidth = ox + LANE_HEADER_WIDTH;
+  // Focus a role → bring its first step into view, just right of the frozen column (VIS-08).
+  // Runs only when the focused role changes, not when the user zooms afterwards.
+  const lastFocus = useRef<string | null>(null);
+  useEffect(() => {
+    const el = scroller.current;
+    if (focusLaneId === lastFocus.current || !el || !size.w) return;
+    lastFocus.current = focusLaneId;
+    if (!focusLaneId) return;
+    const first = L.nodes.filter((n) => n.laneId === focusLaneId).sort((a, b) => a.x - b.x || a.y - b.y)[0];
+    if (!first) return;
+    el.scrollTo({
+      left: Math.max(0, (ox + first.x - frozenWidth - 32) * z),
+      top: Math.max(0, (oy + first.y + first.height / 2) * z - el.clientHeight / 2),
+      behavior: 'smooth',
+    });
+  }, [focusLaneId, L.nodes, ox, oy, frozenWidth, z, size.w]);
   const laneTop = oy + (L.lanes[0]?.y ?? 0);
   const laneBottom = oy + (L.lanes.at(-1) ? L.lanes.at(-1)!.y + L.lanes.at(-1)!.height : 0);
   // Page furniture pinned horizontally (DEC-043). Only when it fits the visible width; otherwise it

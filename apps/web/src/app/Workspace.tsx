@@ -3,7 +3,7 @@
  * Lazy-loaded by App so the import screen ships without React Flow and the engines (Architecture §23, DEC-022).
  */
 import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Undo2, Redo2, Download, Copy, FolderOpen, X, Check, Loader2, Plus, ChevronDown, ScanSearch, List } from 'lucide-react';
+import { Undo2, Redo2, Download, Copy, FolderOpen, X, Check, Loader2, Plus, ChevronDown, ScanSearch, List, ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 import { useStore as useZustand } from 'zustand';
 import { summaryLine } from '@bpmap/scene';
@@ -62,10 +62,9 @@ function DefinitionTabs() {
             </button>
             <button
               type="button"
-              aria-label={`Remove ${d.process} from this browser`}
-              onClick={() => {
-                if (confirm(`Remove “${d.process}” and its customisations from this browser? This can’t be undone.`)) remove(d.id);
-              }}
+              aria-label={`Close ${d.variant ? `${d.process} (${d.variant})` : d.process}`}
+              title="Close (you can undo)"
+              onClick={() => remove(d.id)}
               className="rounded-full p-1 hover:bg-surface-sunken"
             >
               <X className="h-3 w-3" />
@@ -143,6 +142,16 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
   const setFocusLane = useStore((s) => s.setFocusLane);
   const listMode = useStore((s) => s.listMode);
   const setListMode = useStore((s) => s.setListMode);
+  const selectedStepId = useStore((s) => s.selectedStepId);
+  const select = useStore((s) => s.select);
+  // The focused role's steps in reading order (left → right, then top → bottom) for the ‹ › stepper.
+  const roleSteps = focusLaneId ? diagram.layout.nodes.filter((n) => n.laneId === focusLaneId).sort((a, b) => a.x - b.x || a.y - b.y).map((n) => n.id) : [];
+  const roleIndex = selectedStepId ? roleSteps.indexOf(selectedStepId) : -1;
+  const goRoleStep = (delta: number) => {
+    if (!roleSteps.length) return;
+    const next = roleIndex < 0 ? (delta > 0 ? 0 : roleSteps.length - 1) : (roleIndex + delta + roleSteps.length) % roleSteps.length;
+    select(roleSteps[next]!);
+  };
   // Exports are always rendered light (DS §12), whatever the screen theme (DEC-046).
   const page = (): ExportPage => ({ title: `${titleOf(diagram.def)} · ${VIEW_LABEL[diagram.view]}`, scene: deriveDiagram(diagram.def, diagram.overlay, diagram.scenario, diagram.view, 'light').scene });
   const pack = (): ExportPage[] =>
@@ -190,6 +199,19 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
             ))}
           </select>
         </label>
+      )}
+      {diagram.view !== 'executive' && !listMode && focusLaneId && (
+        <div className="flex items-center rounded-[var(--radius-sm)] border border-border-strong" role="group" aria-label="Steps for this role">
+          <button type="button" aria-label="Previous step for this role" onClick={() => goRoleStep(-1)} disabled={!roleSteps.length} className="grid h-8 w-7 place-items-center text-text-secondary hover:bg-surface-sunken disabled:opacity-40">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="min-w-[3.5rem] text-center text-xs tabular-nums text-text-secondary" data-testid="role-step-count" aria-live="polite">
+            {roleSteps.length === 0 ? 'no steps' : roleIndex < 0 ? `${roleSteps.length} step${roleSteps.length === 1 ? '' : 's'}` : `${roleIndex + 1} / ${roleSteps.length}`}
+          </span>
+          <button type="button" aria-label="Next step for this role" onClick={() => goRoleStep(1)} disabled={!roleSteps.length} className="grid h-8 w-7 place-items-center text-text-secondary hover:bg-surface-sunken disabled:opacity-40">
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
       )}
       <button
         type="button"

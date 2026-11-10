@@ -137,3 +137,32 @@ test('re-import: customisations on a removed step are kept and can be removed (I
   await notice.getByRole('button', { name: /Remove it/ }).click();
   await expect(page.getByTestId('orphans')).toHaveCount(0);
 });
+
+test('focus on a role scrolls to its first step; ‹ › walks through its steps (VIS-08)', async ({ page }) => {
+  const scroller = page.getByLabel(/^Diagram of /);
+  expect(await scroller.evaluate((e) => e.scrollLeft)).toBe(0);
+  await page.getByLabel('Focus on a role').selectOption({ label: 'Payroll Partner' });
+  const first = page.locator('[data-testid=step]', { hasText: 'Assign Pay Group' });
+  await expect(first).toBeInViewport();
+  expect(await scroller.evaluate((e) => e.scrollLeft)).toBeGreaterThan(500);
+  const count = page.getByTestId('role-step-count');
+  await expect(count).toHaveText(/^\d+ steps?$/);
+  await page.getByRole('button', { name: 'Next step for this role' }).click();
+  await expect(count).toHaveText(/^1 \/ \d+$/);
+  await expect(page.getByRole('tabpanel')).toContainText('Payroll Partner');
+});
+
+test('closing a definition removes it at once and Undo brings it back with its edits', async ({ page }) => {
+  await page.locator('[data-testid=step]', { hasText: 'Assign Pay Group' }).click();
+  await page.getByLabel('Note (shows as N on the step)').fill('Keep me');
+  await page.getByRole('button', { name: /^Close / }).click();
+  await expect(page.getByTestId('removed-toast')).toBeVisible();
+  await expect(page.locator('[data-testid=step]')).toHaveCount(0); // last definition → import screen
+  await page.getByTestId('removed-toast').getByRole('button', { name: 'Undo' }).click();
+  await expect(page.locator('[data-testid=step]')).toHaveCount(26);
+  await page.locator('[data-testid=step]', { hasText: 'Assign Pay Group' }).click();
+  await expect(page.getByLabel('Note (shows as N on the step)')).toHaveValue('Keep me');
+  await page.getByRole('button', { name: /^Close / }).click();
+  await page.reload();
+  await expect(page.locator('[data-testid=step]')).toHaveCount(0); // stays closed after reload
+});

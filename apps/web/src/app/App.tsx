@@ -3,7 +3,7 @@
  * lazy-loaded Workspace. Import dialogs and toasts live here so they work in both states.
  */
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { ShieldCheck, Sun, Moon, Monitor, X, Check, Loader2 } from 'lucide-react';
+import { ShieldCheck, Sun, Moon, Monitor, X, Check, Loader2, Undo2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useStore, type ThemePref } from '../store/store.ts';
 import { useResolvedTheme } from './derive.ts';
@@ -16,6 +16,14 @@ const Workspace = lazy(() => import('./Workspace.tsx'));
 export function App() {
   const theme = useResolvedTheme();
   const hasDefinitions = useStore((s) => s.definitions.length > 0);
+  const lastRemoved = useStore((s) => s.lastRemoved);
+  const restoreRemoved = useStore((s) => s.restoreRemoved);
+  const forgetRemoved = useStore((s) => s.forgetRemoved);
+  useEffect(() => {
+    if (!lastRemoved) return;
+    const t = setTimeout(forgetRemoved, 10_000);
+    return () => clearTimeout(t);
+  }, [lastRemoved, forgetRemoved]);
   const [toast, setToast] = useState<Toast>(null);
   useEffect(() => {
     if (!toast) return;
@@ -45,6 +53,17 @@ export function App() {
         </Suspense>
       )}
       <MappingDialog />
+      {lastRemoved && (
+        <div role="status" data-testid="removed-toast" className="fixed bottom-10 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-3 rounded-[var(--radius-md)] bg-primary px-4 py-2 text-sm text-on-primary shadow-[var(--shadow-e3)]">
+          Closed “{lastRemoved.definition.process}{lastRemoved.definition.variant ? ` (${lastRemoved.definition.variant})` : ''}”
+          <button type="button" onClick={restoreRemoved} className="flex items-center gap-1 rounded px-2 py-1 font-semibold underline-offset-2 hover:underline">
+            <Undo2 className="h-3.5 w-3.5" aria-hidden /> Undo
+          </button>
+          <button type="button" aria-label="Dismiss" onClick={forgetRemoved} className="rounded p-1 opacity-80 hover:opacity-100">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
       {toast && (
         <div role="status" className={clsx('fixed bottom-10 right-4 z-[70] flex items-center gap-2 rounded-[var(--radius-md)] px-4 py-2.5 text-sm shadow-[var(--shadow-e3)]', toast.kind === 'ok' ? 'bg-primary text-on-primary' : 'bg-danger text-white')}>
           {toast.kind === 'ok' ? <Check className="h-4 w-4" aria-hidden /> : <X className="h-4 w-4" aria-hidden />}
