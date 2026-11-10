@@ -1,0 +1,44 @@
+@import "tailwindcss";
+@import "@bpmap/design-tokens/tokens.css";
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-bg text-text font-sans antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
+    }
+  }
+}
+
+/* Canvas: the scene background sits under the React Flow nodes (DEC-014). */
+.react-flow__viewport-portal {
+  z-index: 0;
+}
+.react-flow__nodes {
+  z-index: 1;
+}
+.react-flow__node.selected .bpm-step,
+.react-flow__node:focus-visible .bpm-step {
+  box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-focus);
+}
+.react-flow__node:focus-visible {
+  outline: none;
+}
+.react-flow__attribution {
+  display: none; /* React Flow's MIT licence allows this; attribution is in the About text */
+}

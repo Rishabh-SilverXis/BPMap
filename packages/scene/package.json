@@ -1,0 +1,20 @@
+{
+  "name": "@bpmap/scene",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Render-agnostic display list + SVG serialiser",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@bpmap/model": "*",
+    "@bpmap/engine-graph": "*",
+    "@bpmap/engine-layout": "*",
+    "@bpmap/design-tokens": "*"
+  },
+  "devDependencies": {
+    "@bpmap/fixtures": "*",
+    "@bpmap/importer-xlsx": "*"
+  }
+}

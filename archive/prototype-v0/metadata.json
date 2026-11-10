@@ -1,0 +1,5 @@
+{
+  "name": "Workday Flowchart AI",
+  "description": "Converts Workday Business Process Steps table screenshots into professional swimlane flowcharts using AI.",
+  "requestFramePermissions": []
+}

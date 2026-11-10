@@ -1,0 +1,568 @@
+{
+  "id": "change-job--synthetic-sample",
+  "process": "Change Job",
+  "variant": "Synthetic Sample",
+  "source": {
+    "kind": "xlsx",
+    "fileName": "change-job.xlsx",
+    "contentHash": "fnv1a-b70a4787-9609",
+    "importedAt": "2026-11-10T00:00:00.000Z"
+  },
+  "initiatingGroups": [
+    "Initiator"
+  ],
+  "steps": [
+    {
+      "id": "a-initiation-initiation",
+      "order": "a",
+      "stageKey": "__a000",
+      "kind": "initiation",
+      "rawType": "Initiation",
+      "task": "",
+      "groups": [
+        "Initiator"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 5
+    },
+    {
+      "id": "b-action-review-current-manager",
+      "order": "b",
+      "stageKey": "__b000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Review: Current Manager",
+      "groups": [
+        "Manager"
+      ],
+      "allMustAct": false,
+      "optional": true,
+      "conditionIds": [
+        "C1"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "alternate": "Alternate Approver",
+      "routing": "Current manager",
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 6
+    },
+    {
+      "id": "c-action-review-receiving-manager",
+      "order": "c",
+      "stageKey": "__c000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Review: Receiving Manager",
+      "groups": [
+        "Manager"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C2"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "alternate": "Alternate Approver",
+      "routing": "Proposed manager",
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 7
+    },
+    {
+      "id": "d-approval-approve",
+      "order": "d",
+      "stageKey": "__d000",
+      "kind": "approval",
+      "rawType": "Approval",
+      "task": "Approve",
+      "groups": [
+        "Manager's Manager"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C3"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "alternate": "Manager (relative to excluded)",
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 8
+    },
+    {
+      "id": "e-action-review-change-job",
+      "order": "e",
+      "stageKey": "__e000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Review Change Job",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": true,
+      "conditionIds": [
+        "C4"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "routing": "Proposed manager",
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 9
+    },
+    {
+      "id": "f-action-change-organization-assignments",
+      "order": "f",
+      "stageKey": "__f000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Change Organization Assignments",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": true,
+      "conditionIds": [
+        "C5"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 10
+    },
+    {
+      "id": "f1-action-assign-collective-agreement",
+      "order": "f1",
+      "stageKey": "__f001",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Assign Collective Agreement",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C6"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 11
+    },
+    {
+      "id": "g-action-propose-compensation-change",
+      "order": "g",
+      "stageKey": "__g000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Propose Compensation Change",
+      "groups": [
+        "Compensation Partner"
+      ],
+      "allMustAct": false,
+      "optional": true,
+      "conditionIds": [
+        "C7"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "alternate": "Alternate Approver",
+      "routing": "Proposed manager",
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 12
+    },
+    {
+      "id": "h-approval-approve",
+      "order": "h",
+      "stageKey": "__h000",
+      "kind": "approval",
+      "rawType": "Approval",
+      "task": "Approve",
+      "groups": [
+        "Works Council"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C8",
+        "C9"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 13
+    },
+    {
+      "id": "i-todo-complete-offboarding-checklist",
+      "order": "i",
+      "stageKey": "__i000",
+      "kind": "todo",
+      "rawType": "To Do",
+      "task": "Complete Offboarding Checklist",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C10"
+      ],
+      "dueDate": "Today (from effective date)",
+      "dueOnEffectiveDate": true,
+      "routing": "Current manager",
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": true,
+      "sourceRow": 14
+    },
+    {
+      "id": "j-todo-review-security-group-assignments",
+      "order": "j",
+      "stageKey": "__j000",
+      "kind": "todo",
+      "rawType": "To Do",
+      "task": "Review Security Group Assignments",
+      "groups": [
+        "Security Administrator"
+      ],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [
+        "C11"
+      ],
+      "dueDate": "Today (from effective date)",
+      "dueOnEffectiveDate": true,
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 15
+    },
+    {
+      "id": "j-action-update-role-assignments",
+      "order": "j",
+      "stageKey": "__j000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Update Role Assignments",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": true,
+      "conditionIds": [
+        "C12"
+      ],
+      "dueDate": "Today (from effective date)",
+      "dueOnEffectiveDate": true,
+      "alternate": "Alternate Owner",
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 16
+    },
+    {
+      "id": "k-action-maintain-employee-contract",
+      "order": "k",
+      "stageKey": "__k000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Maintain Employee Contract",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": true,
+      "conditionIds": [
+        "C13",
+        "C14"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 17
+    },
+    {
+      "id": "k-action-assign-pay-group",
+      "order": "k",
+      "stageKey": "__k000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Assign Pay Group",
+      "groups": [
+        "Payroll Interface Partner",
+        "Payroll Partner"
+      ],
+      "allMustAct": false,
+      "optional": true,
+      "conditionIds": [
+        "C15",
+        "C16"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "alternate": "Alternate Approver",
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 18
+    },
+    {
+      "id": "k-todo-other-onboarding-procedures",
+      "order": "k",
+      "stageKey": "__k000",
+      "kind": "todo",
+      "rawType": "To Do",
+      "task": "Other Onboarding Procedures",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": true,
+      "conditionIds": [
+        "C10"
+      ],
+      "dueDate": "1 Day",
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 19
+    },
+    {
+      "id": "k-action-manage-business-processes-for-worker",
+      "order": "k",
+      "stageKey": "__k000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Manage Business Processes for Worker",
+      "groups": [
+        "HR Partner"
+      ],
+      "allMustAct": false,
+      "optional": true,
+      "conditionIds": [
+        "C17"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 20
+    },
+    {
+      "id": "k-action-change-superior-organization",
+      "order": "k",
+      "stageKey": "__k000",
+      "kind": "action",
+      "rawType": "Action",
+      "task": "Change Superior Organization",
+      "groups": [
+        "Organization Owner"
+      ],
+      "allMustAct": false,
+      "optional": true,
+      "conditionIds": [
+        "C18"
+      ],
+      "dueDate": "2 Days",
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 21
+    },
+    {
+      "id": "k-service-remove-invalid-time-off-after-job-change",
+      "order": "k",
+      "stageKey": "__k000",
+      "kind": "service",
+      "rawType": "Service",
+      "task": "Remove Invalid Time Off After Job Change",
+      "groups": [],
+      "allMustAct": false,
+      "optional": false,
+      "conditionIds": [],
+      "dueOnEffectiveDate": false,
+      "runsAsNamedUser": false,
+      "doNotAdvance": false,
+      "complete": false,
+      "sourceRow": 22
+    }
+  ],
+  "conditions": [
+    {
+      "id": "C1",
+      "text": "Initiated from the transfer request task?",
+      "workdayOwned": true,
+      "stepIds": [
+        "b-action-review-current-manager"
+      ]
+    },
+    {
+      "id": "C2",
+      "text": "Receiving manager differs from current manager?",
+      "workdayOwned": true,
+      "stepIds": [
+        "c-action-review-receiving-manager"
+      ]
+    },
+    {
+      "id": "C3",
+      "text": "Change is a promotion?",
+      "workdayOwned": false,
+      "stepIds": [
+        "d-approval-approve"
+      ]
+    },
+    {
+      "id": "C4",
+      "text": "Approver was not the initiator?",
+      "workdayOwned": false,
+      "stepIds": [
+        "e-action-review-change-job"
+      ]
+    },
+    {
+      "id": "C5",
+      "text": "No later organization changes pending?",
+      "workdayOwned": true,
+      "stepIds": [
+        "f-action-change-organization-assignments"
+      ]
+    },
+    {
+      "id": "C6",
+      "text": "Country uses collective agreements?",
+      "workdayOwned": false,
+      "stepIds": [
+        "f1-action-assign-collective-agreement"
+      ]
+    },
+    {
+      "id": "C7",
+      "text": "Worker is an employee?",
+      "workdayOwned": true,
+      "stepIds": [
+        "g-action-propose-compensation-change"
+      ]
+    },
+    {
+      "id": "C8",
+      "text": "Country requires works council approval?",
+      "workdayOwned": false,
+      "stepIds": [
+        "h-approval-approve"
+      ]
+    },
+    {
+      "id": "C9",
+      "text": "Change is a demotion?",
+      "workdayOwned": false,
+      "stepIds": [
+        "h-approval-approve"
+      ]
+    },
+    {
+      "id": "C10",
+      "text": "Location changed?",
+      "workdayOwned": false,
+      "stepIds": [
+        "i-todo-complete-offboarding-checklist",
+        "k-todo-other-onboarding-procedures"
+      ]
+    },
+    {
+      "id": "C11",
+      "text": "Worker has user-based security groups?",
+      "workdayOwned": false,
+      "stepIds": [
+        "j-todo-review-security-group-assignments"
+      ]
+    },
+    {
+      "id": "C12",
+      "text": "Worker has role-based assignments?",
+      "workdayOwned": false,
+      "stepIds": [
+        "j-action-update-role-assignments"
+      ]
+    },
+    {
+      "id": "C13",
+      "text": "Country uses employee contracts?",
+      "workdayOwned": false,
+      "stepIds": [
+        "k-action-maintain-employee-contract"
+      ]
+    },
+    {
+      "id": "C14",
+      "text": "Contract ended before effective date?",
+      "workdayOwned": true,
+      "stepIds": [
+        "k-action-maintain-employee-contract"
+      ]
+    },
+    {
+      "id": "C15",
+      "text": "Primary job and no pending pay group change?",
+      "workdayOwned": true,
+      "stepIds": [
+        "k-action-assign-pay-group"
+      ]
+    },
+    {
+      "id": "C16",
+      "text": "Position changed?",
+      "workdayOwned": false,
+      "stepIds": [
+        "k-action-assign-pay-group"
+      ]
+    },
+    {
+      "id": "C17",
+      "text": "Worker has delegations or awaiting tasks?",
+      "workdayOwned": true,
+      "stepIds": [
+        "k-action-manage-business-processes-for-worker"
+      ]
+    },
+    {
+      "id": "C18",
+      "text": "Move manager team selected?",
+      "workdayOwned": true,
+      "stepIds": [
+        "k-action-change-superior-organization"
+      ]
+    }
+  ],
+  "notifications": [],
+  "warnings": []
+}

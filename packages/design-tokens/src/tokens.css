@@ -1,0 +1,75 @@
+/*
+ * Semantic tokens for Tailwind v4 (Design System §15.1). Mirrors `semantic` in index.ts.
+ * tokens.test.ts fails if a value here drifts from the TypeScript source (DEC-012).
+ * Import AFTER `@import "tailwindcss";`.
+ */
+@theme {
+  --font-sans: "Inter Variable", Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", Menlo, Consolas, monospace;
+
+  --color-bg: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-surface-sunken: #F1F5F9;
+  --color-border: #E2E8F0;
+  --color-border-strong: #64748B;
+  --color-text: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748B;
+  --color-primary: #14284B;
+  --color-on-primary: #FFFFFF;
+  --color-action: #0B6E63;
+  --color-on-action: #FFFFFF;
+  --color-accent: #0F9D8A;
+  --color-focus: #2F5D9E;
+  --color-conditional: #D97706;
+  --color-conditional-subtle: #FEF3C7;
+  --color-on-conditional-subtle: #92400E;
+  --color-ai: #6D28D9;
+  --color-ai-subtle: #F5F3FF;
+  --color-success: #15803D;
+  --color-danger: #DC2626;
+  --color-warning: #B45309;
+  --color-info: #075985;
+  --color-diff-modified: #2F5D9E;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-e1: 0 1px 2px rgb(15 23 42 / .06);
+  --shadow-e2: 0 4px 12px rgb(15 23 42 / .08);
+  --shadow-e3: 0 12px 32px rgb(15 23 42 / .14);
+  --shadow-e4: 0 24px 64px rgb(15 23 42 / .22);
+  --ease-standard: cubic-bezier(.2, 0, 0, 1);
+}
+
+/* Dark: explicit choice, or system preference (class set by an inline script) unless forced light. */
+:root[data-theme="dark"],
+:root.system-dark:not([data-theme="light"]) {
+  --color-bg: #0B1220;
+  --color-surface: #111A2E;
+  --color-surface-sunken: #0E1728;
+  --color-border: #334155;
+  --color-border-strong: #7B8BA3;
+  --color-text: #E2E8F0;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #7B8BA3;
+  --color-primary: #3B5F99;
+  --color-on-primary: #FFFFFF;
+  --color-action: #5EEAD4;
+  --color-on-action: #0B1220;
+  --color-accent: #5EEAD4;
+  --color-focus: #8FB0E8;
+  --color-conditional: #F59E0B;
+  --color-conditional-subtle: #3A2A0B;
+  --color-on-conditional-subtle: #FCD34D;
+  --color-ai: #C4B5FD;
+  --color-ai-subtle: #221A3D;
+  --color-success: #4ADE80;
+  --color-danger: #F87171;
+  --color-warning: #FBBF24;
+  --color-info: #7DD3FC;
+  --color-diff-modified: #93C5FD;
+  color-scheme: dark;
+}

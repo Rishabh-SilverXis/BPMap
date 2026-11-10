@@ -1,0 +1,29 @@
+{
+  "name": "bpmap",
+  "private": true,
+  "type": "module",
+  "description": "BPMap for Workday: see, simulate and govern Workday business processes, privately in the browser.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @bpmap/web",
+    "build": "npm run build -w @bpmap/web",
+    "preview": "npm run preview -w @bpmap/web",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "fixtures": "node packages/fixtures/scripts/make-fixtures.mjs",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.0",
+    "vitest": "^5.0.0",
+    "exceljs": "^4.0.0",
+    "@types/node": "^26.0.0"
+  }
+}

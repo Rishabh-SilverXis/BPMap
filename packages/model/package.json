@@ -1,0 +1,13 @@
+{
+  "name": "@bpmap/model",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Canonical ProcessModel types, zod schemas, stable IDs, order/stage keys",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  }
+}

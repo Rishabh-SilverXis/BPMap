@@ -1,0 +1,12 @@
+{
+  "name": "@bpmap/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Design tokens (Design System \u00a73) for UI, canvas and exporters",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./src/tokens.css"
+  },
+  "dependencies": {}
+}

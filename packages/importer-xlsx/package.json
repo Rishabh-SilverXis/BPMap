@@ -1,0 +1,18 @@
+{
+  "name": "@bpmap/importer-xlsx",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Workday View Definition XLSX \u2192 ProcessDefinition (worker-safe)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@bpmap/model": "*",
+    "fflate": "^0.8.0",
+    "fast-xml-parser": "^5.0.0"
+  },
+  "devDependencies": {
+    "@bpmap/fixtures": "*"
+  }
+}

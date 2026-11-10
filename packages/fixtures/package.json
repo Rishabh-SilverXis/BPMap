@@ -1,0 +1,12 @@
+{
+  "name": "@bpmap/fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Synthetic and anonymised Workday BP export fixtures",
+  "exports": {
+    ".": "./src/index.ts",
+    "./data/*": "./data/*"
+  },
+  "dependencies": {}
+}

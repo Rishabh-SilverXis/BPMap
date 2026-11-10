@@ -1,0 +1,17 @@
+{
+  "name": "@bpmap/engine-graph",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Semantic graph: stages, lanes, transitions",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@bpmap/model": "*"
+  },
+  "devDependencies": {
+    "@bpmap/fixtures": "*",
+    "@bpmap/importer-xlsx": "*"
+  }
+}
