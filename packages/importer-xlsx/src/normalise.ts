@@ -220,6 +220,8 @@ export function normaliseSteps(input: NormaliseInput): ProcessDefinition {
 
   const initiation = steps.find((s) => s.kind === 'initiation');
   if (!initiation) warnings.push({ code: 'W-NO-INITIATION', message: 'No Initiation step was found. The diagram starts at the first stage.' });
+  const initiations = steps.filter((s) => s.kind === 'initiation');
+  if (initiations.length > 1) warnings.push({ code: 'W-NO-INITIATION', row: initiations[1]!.sourceRow, message: `${initiations.length} Initiation steps were found (orders ${initiations.map((s) => s.order).join(', ')}); Workday allows one. Check the export.` });
   if (input.truncatedRows) warnings.push({ code: 'W-ROWS-TRUNCATED', message: `Only the first ${limits.maxRowsPerSheet} rows were read.` });
   if (truncatedCells) warnings.push({ code: 'W-CELL-TRUNCATED', message: `${truncatedCells} cell(s) longer than ${limits.maxCellChars} characters were shortened.` });
   if (residue) warnings.push({ code: 'W-ENCODING', message: `${residue} cell(s) still contain encoded characters (such as "&#…;") after decoding. Check the text of conditions and groups.` });

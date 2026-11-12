@@ -8,9 +8,9 @@ Legend: `→` calls / passes data to · `⇢` async (worker message, promise, ti
 
 ## Current work
 
-> **Phase 2 ✅ complete** (Increment 2.4: DEC-052..054): subprocess linking and multi-file import, layout nudges (Arrange), and scenario answers/presets that survive condition renumbering. 149 unit + 21 e2e tests. EXP-09 (account-gated formats) waits for the Phase 3 backend.
+> **Phase 2 ✅ complete + test campaign (2026-11-12, DEC-055):** 17 defects fixed (PNG hang on wide processes, late edits lost on tab close, no details panel on tablets, step-type catalogue, notification sheet mis-detected as Steps…). 157 unit + 25 e2e tests. Report with 14 ranked open findings: [testing/TEST_REPORT_2026-11-12.md](testing/TEST_REPORT_2026-11-12.md).
 >
-> ⏭ **Phase 3** (per PRD §14): condition-rule and security-policy import (IMP-09/10), test plans (SCN-04/05), definition comparison (CMP-01..04), opt-in AI assist.
+> ⏭ Highest open items: editable PowerPoint/draw.io (one shape per step, swimlane containers, bound connectors), tiled pages with paper sizes, cross-browser CI.
 >
 > No path is being modified at the moment.
 
@@ -169,6 +169,9 @@ useStore.subscribe((s, prev) => …)                         persistence/db.ts
  ⇢ 500 ms debounce → db.kv.bulkPut([{ project }, { mappingProfiles }])
       ├ ok   → saveState = 'saved'        → "Saved in this browser"
       └ fail → saveState = 'unavailable'  → "Browser storage unavailable: export a project file…"
+ ⇢ pagehide / tab hidden → flush the pending save now (an edit < 500 ms before closing is kept)
+ ⇢ after each save → BroadcastChannel('bpmap-project').postMessage({from: TAB_ID})
+      → other tabs: store.changedInOtherTab = true → App banner "changed in another tab · Reload"
 ```
 
 ## 6. Export & project file ✅
@@ -186,7 +189,8 @@ Toolbar ▸ Export menu → run(fn, okText) → toast                     app/Wo
  ├ This view ▸ PowerPoint ⇢ import('@bpmap/exporters') → buildPptx(slides) → flatten(scene)
  │                           → pptxgenjs native shapes, lines per segment, ≤ 56 in → .pptx blob
  ├ This view ▸ draw.io    ⇢ toDrawio([page]) → flatten(scene) → escaped mxCell XML → .drawio
- ├ This view ▸ SVG / PNG  → svgBlob(def, scene) → toSvg  ·  pngBlob: svg → <img> → canvas 2×
+ ├ This view ▸ SVG / PNG  → svgBlob(def, scene) → toSvg  ·  pngBlob: pngScale(scene) (≤ 2×, canvas limit)
+ │                           → svg → <img> → canvas → toBlob (30 s timeout; < 0.5× → "use SVG or PDF")
  ├ All N definitions ▸ PDF / PowerPoint / draw.io → same functions with pack() (one page/slide each)
  ├ This view ▸ Excel      ⇢ xlsxBlob([{def, overlay, findings}]) → workbookSheets (Steps · Conditions · Health)
  │                           ⇢ import('@bpmap/exporters') → buildXlsx(sheets) → fflate zipSync  features/export/workbook.ts

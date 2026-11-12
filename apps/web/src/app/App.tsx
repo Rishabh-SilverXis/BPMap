@@ -21,6 +21,7 @@ export function App() {
   const forgetRemoved = useStore((s) => s.forgetRemoved);
   const importNotice = useStore((s) => s.importNotice);
   const dismissImportNotice = useStore((s) => s.dismissImportNotice);
+  const changedInOtherTab = useStore((s) => s.changedInOtherTab);
   useEffect(() => {
     if (!lastRemoved) return;
     const t = setTimeout(forgetRemoved, 10_000);
@@ -37,6 +38,14 @@ export function App() {
     <div className="flex h-full flex-col">
       <TopBar />
       <ImportError />
+      {changedInOtherTab && (
+        <div role="alert" data-testid="other-tab-notice" className="flex items-start gap-2 border-b border-warning/40 bg-surface-sunken px-4 py-2 text-[13px] text-text">
+          <span className="flex-1">This project was changed in another tab of this browser. Reload to see those changes; edits you make here first would overwrite them.</span>
+          <button type="button" onClick={() => location.reload()} className="rounded-[var(--radius-sm)] border border-border-strong px-2 py-0.5 text-xs font-semibold hover:bg-surface">
+            Reload
+          </button>
+        </div>
+      )}
       {importNotice && (
         <div role="status" data-testid="import-notice" className="flex items-start gap-2 border-b border-warning/40 bg-surface-sunken px-4 py-2 text-[13px] text-text">
           <span className="flex-1">{importNotice}</span>

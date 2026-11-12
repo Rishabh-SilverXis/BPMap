@@ -10,6 +10,7 @@ const TYPE_TO_KIND: Record<string, StepKind> = {
   approval: 'approval',
   'approval chain': 'approval-chain',
   'consolidated approval chain': 'consolidated-approval-chain',
+  'consolidated approval': 'approval', // one approver sees a consolidated view: an approval (TEST-2026-11-11 D1)
   action: 'action',
   'to do': 'todo',
   todo: 'todo',
@@ -21,6 +22,13 @@ const TYPE_TO_KIND: Record<string, StepKind> = {
   integration: 'integration',
   service: 'service',
   'workday service': 'service',
+  'batch/job': 'service', // system-run kinds: no security group, system lane
+  'batch job': 'service',
+  batch: 'service',
+  report: 'service',
+  'run report': 'service',
+  document: 'review',
+  documents: 'review',
   'sub-process': 'subprocess',
   'sub process': 'subprocess',
   subprocess: 'subprocess',

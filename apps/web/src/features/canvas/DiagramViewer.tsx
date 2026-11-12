@@ -181,6 +181,12 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: The
         role="region"
         aria-label={`Diagram of ${diagram.def.process}. Scroll to explore; Ctrl or Command with the mouse wheel zooms.`}
         onScroll={(e) => setScrolledX((e.currentTarget as HTMLDivElement).scrollLeft > 4)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && selected) {
+            select(null); // keyboard way to deselect (TEST-2026-11-11)
+            e.stopPropagation();
+          }
+        }}
         className="min-h-0 flex-1 overflow-auto bg-bg focus-visible:outline-none"
       >
         <div

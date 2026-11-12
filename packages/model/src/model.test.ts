@@ -54,7 +54,10 @@ describe('kinds (MOD-05)', () => {
   it('maps Workday type labels and keeps unknowns explicit', () => {
     expect(kindOf('To Do')).toBe('todo');
     expect(kindOf('Consolidated  Approval Chain')).toBe('consolidated-approval-chain');
-    expect(kindOf('Batch')).toBe('unknown');
+    expect(kindOf('Consolidated Approval')).toBe('approval');
+    expect(kindOf('Batch/Job')).toBe('service');
+    expect(kindOf('Report')).toBe('service');
+    expect(kindOf('Flibble')).toBe('unknown');
   });
 });
 

@@ -75,26 +75,47 @@ export async function hydrateFromStorage(): Promise<void> {
   }
 }
 
-/** Debounced autosave of the persisted slices (500 ms after the last change). */
+/** Every tab of this origin shares the project; this id tells "my save" from another tab's (DEC-055). */
+const TAB_ID = Math.random().toString(36).slice(2);
+const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('bpmap-project') : null;
+
+/**
+ * Debounced autosave of the persisted slices (500 ms after the last change). The pending save is
+ * flushed when the tab is hidden or closed, so an edit made just before closing is not lost
+ * (TEST-2026-11-11). Other tabs are told after each save and show a "changed elsewhere" notice.
+ */
 export function startAutosave(): void {
   if (!db) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const save = async () => {
+    timer = undefined;
+    const st = useStore.getState();
+    try {
+      await db!.kv.bulkPut([
+        { key: 'project', value: { definitions: st.definitions, overlays: st.overlays, scenarios: st.scenarios, views: st.views, reports: st.reports, activeId: st.activeId } satisfies SavedProject },
+        { key: 'mappingProfiles', value: st.mappingProfiles },
+      ]);
+      useStore.setState({ saveState: 'saved' });
+      channel?.postMessage({ from: TAB_ID, at: Date.now() });
+    } catch {
+      useStore.setState({ saveState: 'unavailable' });
+    }
+  };
   useStore.subscribe((s, prev) => {
     if (s.definitions === prev.definitions && s.overlays === prev.overlays && s.scenarios === prev.scenarios && s.views === prev.views && s.activeId === prev.activeId && s.mappingProfiles === prev.mappingProfiles) return;
     clearTimeout(timer);
     if (s.saveState !== 'saving') useStore.setState({ saveState: 'saving' });
-    timer = setTimeout(async () => {
-      const st = useStore.getState();
-      try {
-        await db!.kv.bulkPut([
-          { key: 'project', value: { definitions: st.definitions, overlays: st.overlays, scenarios: st.scenarios, views: st.views, reports: st.reports, activeId: st.activeId } satisfies SavedProject },
-          { key: 'mappingProfiles', value: st.mappingProfiles },
-        ]);
-        useStore.setState({ saveState: 'saved' });
-      } catch {
-        useStore.setState({ saveState: 'unavailable' });
-      }
-    }, 500);
+    timer = setTimeout(save, 500);
+  });
+  const flush = () => {
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    void save(); // IndexedDB writes started during pagehide complete in current browsers
+  };
+  window.addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flush());
+  channel?.addEventListener('message', (e: MessageEvent<{ from: string }>) => {
+    if (e.data?.from !== TAB_ID) useStore.setState({ changedInOtherTab: true });
   });
   void navigator.storage?.persist?.().catch(() => undefined);
 }

@@ -298,3 +298,42 @@ test('arrange: arrow keys and drag move a step, edges follow, kept after reload,
   await expect.poll(async () => Math.round((await again.boundingBox())!.y)).toBe(Math.round(before.y));
   await expect(page.getByRole('button', { name: 'Reset layout' })).toHaveCount(0);
 });
+
+test('an edit made just before the tab closes is saved (autosave flush on pagehide)', async ({ page, context }) => {
+  await page.waitForTimeout(700); // initial import saved
+  await page.locator('[data-testid=step]', { hasText: 'Assign Pay Group' }).click();
+  await page.getByLabel('Note (shows as N on the step)').fill('typed then closed');
+  await page.close({ runBeforeUnload: true }); // within the 500 ms debounce
+  const p2 = await context.newPage();
+  await p2.goto('/');
+  await p2.locator('[data-testid=step]', { hasText: 'Assign Pay Group' }).click();
+  await expect(p2.getByLabel('Note (shows as N on the step)')).toHaveValue('typed then closed');
+});
+
+test('a save in another tab shows a "changed in another tab" notice', async ({ page, context }) => {
+  await page.waitForTimeout(700);
+  const p2 = await context.newPage();
+  await p2.goto('/');
+  await expect(p2.locator('[data-testid=step]')).toHaveCount(26);
+  await p2.locator('[data-testid=step]', { hasText: 'Assign Pay Group' }).click();
+  await p2.getByLabel('Note (shows as N on the step)').fill('from tab B');
+  await expect(page.getByTestId('other-tab-notice')).toBeVisible();
+  await expect(p2.getByTestId('other-tab-notice')).toHaveCount(0); // not on the tab that saved
+});
+
+test('Escape clears the selected step', async ({ page }) => {
+  await page.locator('[data-testid=step]', { hasText: 'Assign Pay Group' }).click();
+  await expect(page.locator('[data-testid=step][aria-pressed=true]')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-testid=step][aria-pressed=true]')).toHaveCount(0);
+});
+
+test('below 1024 px the details panel opens as a drawer when a step is selected', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 900 });
+  await expect(page.getByRole('button', { name: 'Show details panel' })).toBeVisible();
+  await page.locator('[data-testid=step]', { hasText: 'Assign Pay Group' }).click();
+  const drawer = page.getByTestId('details-drawer');
+  await expect(drawer).toContainText('Payroll Partner');
+  await drawer.getByRole('button', { name: 'Close details' }).last().click();
+  await expect(drawer).toHaveCount(0);
+});

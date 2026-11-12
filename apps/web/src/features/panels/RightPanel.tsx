@@ -22,7 +22,7 @@ const TABS: { id: PanelTab; label: string }[] = [
   { id: 'report', label: 'Import' },
 ];
 
-export function RightPanel({ diagram }: { diagram: Diagram }) {
+export function RightPanel({ diagram, onClose }: { diagram: Diagram; onClose?: () => void }) {
   const panel = useStore((s) => s.panel);
   const setPanel = useStore((s) => s.setPanel);
   const warnings = diagram.def.warnings.length;
@@ -39,7 +39,12 @@ export function RightPanel({ diagram }: { diagram: Diagram }) {
   };
 
   return (
-    <aside className="flex h-full w-[360px] shrink-0 flex-col border-l border-border bg-surface" aria-label="Details">
+    <aside className="flex h-full w-[360px] max-w-[100vw] shrink-0 flex-col border-l border-border bg-surface" aria-label="Details">
+      {onClose && (
+        <button type="button" onClick={onClose} className="flex h-9 items-center justify-end gap-1 border-b border-border px-3 text-xs font-semibold text-text-secondary" aria-label="Close details">
+          Close ×
+        </button>
+      )}
       <div role="tablist" aria-label="Panels" className="flex gap-1 border-b border-border px-3" onKeyDown={onKey}>
         {TABS.map((t) => (
           <button

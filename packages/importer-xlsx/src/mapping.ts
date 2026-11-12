@@ -112,6 +112,8 @@ export type SheetKind = 'steps' | 'notifications' | 'allowed-actions' | 'allowed
 const SECTION_TITLES: Record<string, SheetKind> = {
   'business process steps': 'steps',
   notifications: 'notifications',
+  'system notifications': 'notifications', // the two sub-tables, when the sheet title row is missing (TEST-2026-11-11 D2)
+  'custom notifications': 'notifications',
   'allowed actions by role': 'allowed-actions',
   'allowed services': 'allowed-services',
   'related links': 'related-links',

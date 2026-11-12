@@ -63,6 +63,8 @@ export interface ProjectState {
   lastRemoved: RemovedDefinition | null;
   /** One-off message about the last multi-file import (e.g. files over the limit). */
   importNotice: string | null;
+  /** Another tab of this browser saved the project after this tab loaded it (DEC-055). */
+  changedInOtherTab: boolean;
   /** Set when the user opened a subprocess from a calling step, for "← Back" (IMP-04). */
   cameFrom: { defId: string; stepId: string } | null;
   themePref: ThemePref;
@@ -221,6 +223,7 @@ export const useStore = create<ProjectState>()(
         lastRemoved: null,
         cameFrom: null,
         importNotice: null,
+        changedInOtherTab: false,
         setFocusLane: (laneId) => set({ focusLaneId: laneId }),
         setListMode: (on) => set({ listMode: on }),
         applyCustomisations(definitionId, incoming, presets, view) {

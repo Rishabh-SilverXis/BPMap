@@ -475,3 +475,24 @@ Closes Phase 2's buildable scope. Not built: EXP-09 (account-gated export format
     - The mode is off by default, so clicking and scrolling behave as before. The click that ends a drag is ignored, so dropping doesn't change the selection.
   - Nudges are keyed by stable step id, so they survive re-import. Removed steps' nudges are listed as orphans. Executive view ignores nudges.
 - **Why not free placement:** free x/y would let a box drift into another role's lane or the wrong stage, making the swimlane lie, and would need a general edge router. Growing the grid keeps the diagram truthful and keeps routing trivial.
+
+# Test campaign after Phase 2 (2026-11-12)
+
+Full report: [testing/TEST_REPORT_2026-11-12.md](testing/TEST_REPORT_2026-11-12.md). 17 defects fixed with regression tests; 14 open findings ranked there.
+
+## DEC-055 · Fixes from the Phase 2 test campaign
+- **Date:** 2026-11-12 · **Serves:** NFR-REL, NFR-COMP, NFR-A11Y, EXP-01/02, MOD-05, IMP-02
+- **Format limits as tested code:** `@bpmap/exporters/limits` (a subpath, so pptxgenjs stays out of the startup bundle) holds `pngScale` and `pdfPointsPerPx`.
+  - **PNG** is capped at 16,384 px per side and 128 MP, and gives a clear "use SVG or PDF" error below 0.5×, plus a 30 s timeout. Before this, a 200-step process hung with no message.
+  - The cap is Safari-safe and therefore conservative for Chrome (open finding O12).
+  - **PDF** pages are scaled to the 14,400 pt (200 in) reader limit. Text weights are mapped to the standard fonts' regular/bold, because 500/600 fell back to Times.
+- **Autosave:**
+  - A pending save is flushed on `pagehide` or when the tab is hidden. An edit made < 0.5 s before closing was lost.
+  - Each save is broadcast on a `BroadcastChannel`, and other tabs show "changed in another tab, Reload". This is a warning, not a merge: merging per key, or a single-writer lock, is open finding O7. We chose a warning over silent last-writer-wins because the user can act on it.
+- **Narrow screens:** below 1,024 px the details panel is a drawer, opened by a toolbar "Details" button or by selecting a step, and the toolbar wraps. This meets the PRD's "tablet read-only".
+- **Importer:**
+  - Consolidated Approval → approval; Batch/Job and Report → system (service); Document → review.
+  - "System/Custom Notifications" are recognised as section titles, and a sheet with a non-steps title is never guessed as Steps. Before, the mapping dialog opened on the Notifications sheet.
+  - A header with no rows is an error. Two Initiation steps raise a warning. Unnamed custom notifications are kept. "No Steps sheet" says how many rows were searched.
+- **Accessibility:** Escape deselects; the completion green is darkened to 700 (white ✓ ≈ 5:1); tab targets are 24 px.
+- **Copy:** the "Customisations only" hint now says the file contains condition wording (as keys of rewrites); it previously said "no Workday data".

@@ -58,7 +58,7 @@ export function nodeTokens(theme: Theme) {
     edge: theme === 'light' ? p.slate[500] : '#7B8BA3',
     edgeSkip: s.conditional,
     parallelBar: theme === 'light' ? s.primary : p.navy[300],
-    completion: p.green[600],
+    completion: p.green[700], // white ✓ on it needs ≥ 4.5:1 (green-600 was 3.3:1, TEST-2026-11-11)
     stageHeader: s['text-muted'],
     focus: s.focus,
   };

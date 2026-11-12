@@ -3,7 +3,7 @@
  * Lazy-loaded by App so the import screen ships without React Flow and the engines (Architecture §23, DEC-022).
  */
 import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Undo2, Redo2, Download, Copy, FolderOpen, X, Check, Loader2, Plus, ChevronDown, ScanSearch, List, ChevronLeft, ChevronRight, CornerDownRight, ArrowLeft } from 'lucide-react';
+import { Undo2, Redo2, Download, Copy, FolderOpen, X, Check, Loader2, Plus, ChevronDown, ScanSearch, List, ChevronLeft, ChevronRight, CornerDownRight, ArrowLeft, PanelRight } from 'lucide-react';
 import clsx from 'clsx';
 import { useStore as useZustand } from 'zustand';
 import { buildConditionsScene, buildCoverScene, summaryLine } from '@bpmap/scene';
@@ -29,11 +29,17 @@ export default function Workspace({ theme, onToast }: { theme: Theme; onToast: (
   const scenario = useActiveScenario();
   const view = useActiveView();
   const diagram = useDiagram(def, overlay, scenario, view, theme);
+  // Below 1024 px the details panel is a drawer (tablet read-only, NFR-COMP); selecting a step opens it.
+  const [drawer, setDrawer] = useState(false);
+  const selectedStepId = useStore((s) => s.selectedStepId);
+  useEffect(() => {
+    if (selectedStepId && window.matchMedia('(max-width: 1023px)').matches) setDrawer(true);
+  }, [selectedStepId]);
   if (!diagram) return null;
   return (
     <>
       <DefinitionTabs />
-      <Toolbar diagram={diagram} onToast={onToast} />
+      <Toolbar diagram={diagram} onToast={onToast} onDetails={() => setDrawer((d) => !d)} />
       <div className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1 bg-bg">
           {listMode ? <StepList diagram={diagram} /> : <DiagramViewer diagram={diagram} theme={theme} />}
@@ -41,6 +47,14 @@ export default function Workspace({ theme, onToast }: { theme: Theme; onToast: (
         <div className="hidden lg:block">
           <RightPanel diagram={diagram} />
         </div>
+        {drawer && (
+          <div className="fixed inset-0 z-40 lg:hidden" data-testid="details-drawer">
+            <button type="button" aria-label="Close details" className="absolute inset-0 bg-primary/30" onClick={() => setDrawer(false)} />
+            <div className="absolute inset-y-0 right-0 flex max-w-full shadow-[var(--shadow-e3)]">
+              <RightPanel diagram={diagram} onClose={() => setDrawer(false)} />
+            </div>
+          </div>
+        )}
       </div>
       <StatusBar diagram={diagram} />
     </>
@@ -73,7 +87,7 @@ function DefinitionTabs() {
               onClick={() => setActive(d.id)}
               aria-current={d.id === activeId ? 'page' : undefined}
               title={parentOf(d.id) ? `Subprocess of ${titleOf(defs.find((x) => x.id === parentOf(d.id)!.fromId)!)} (step ${parentOf(d.id)!.stepOrder})` : undefined}
-              className="flex items-center gap-1"
+              className="flex h-6 items-center gap-1"
             >
               {parentOf(d.id) && <CornerDownRight className="h-3 w-3 text-text-muted" aria-label="Subprocess" />}
               {d.variant ? `${d.process} (${d.variant})` : d.process}
@@ -83,7 +97,7 @@ function DefinitionTabs() {
               aria-label={`Close ${d.variant ? `${d.process} (${d.variant})` : d.process}`}
               title="Close (you can undo)"
               onClick={() => remove(d.id)}
-              className="rounded-full p-1 hover:bg-surface-sunken"
+              className="grid h-6 w-6 place-items-center rounded-full hover:bg-surface-sunken"
             >
               <X className="h-3 w-3" />
             </button>
@@ -144,7 +158,7 @@ function ToolButton({ onClick, disabled, label, children }: { onClick: () => voi
   );
 }
 
-function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) => void }) {
+function Toolbar({ diagram, onToast, onDetails }: { diagram: Diagram; onToast: (t: Toast) => void; onDetails: () => void }) {
   const { undo, redo } = useStore.temporal.getState();
   const canUndo = useZustand(useStore.temporal, (s) => s.pastStates.length > 0);
   const canRedo = useZustand(useStore.temporal, (s) => s.futureStates.length > 0);
@@ -207,12 +221,13 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
       await fn();
       onToast({ kind: 'ok', text: ok });
     } catch (e) {
-      onToast({ kind: 'error', text: (e as Error).message });
+      // an "ok"-kind error is a success with a caveat (e.g. a PNG that had to be scaled down)
+      onToast({ kind: (e as { kind?: 'ok' }).kind === 'ok' ? 'ok' : 'error', text: (e as Error).message });
     }
   };
 
   return (
-    <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-surface px-4">
+    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-1">
       <Segmented />
       <div className="mx-1 h-5 w-px bg-border" />
       <ToolButton onClick={() => undo()} disabled={!canUndo} label="Undo (customisations)">
@@ -264,6 +279,11 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
         <List className="h-4 w-4" aria-hidden /> Step list
       </button>
       <div className="ml-auto flex items-center gap-1">
+        <span className="lg:hidden">
+          <ToolButton onClick={onDetails} label="Show details panel">
+            <PanelRight className="h-4 w-4" /> Details
+          </ToolButton>
+        </span>
         <ToolButton onClick={() => void run(() => copyPng(diagram.def, page().scene), 'Image copied to the clipboard')} label="Copy image">
           <Copy className="h-4 w-4" /> <span className="hidden xl:inline">Copy image</span>
         </ToolButton>
@@ -294,7 +314,16 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
               { label: 'draw.io (for Visio)', hint: 'Edit in diagrams.net, save as Visio or open in Lucidchart', fn: async () => download(await drawioBlob(pages()), `${base}.drawio`), ok: 'draw.io file downloaded' },
               { label: 'Excel', hint: 'Steps, conditions and health findings as sheets (full definition)', fn: async () => download(await xlsxBlob([{ def: diagram.def, overlay: diagram.overlay, findings: diagram.findings }], titleOf(diagram.def)), `${base}.xlsx`), ok: 'Excel workbook downloaded' },
               { label: 'SVG', hint: 'Vector image for web pages and wikis', fn: () => download(svgBlob(diagram.def, page().scene), `${base}.svg`), ok: 'SVG downloaded' },
-              { label: 'PNG (2×)', hint: 'For chat, email and slides', fn: async () => download(await pngBlob(diagram.def, page().scene), `${base}.png`), ok: 'PNG downloaded' },
+              {
+                label: 'PNG (2×)',
+                hint: 'For chat, email and slides',
+                fn: async () => {
+                  const png = await pngBlob(diagram.def, page().scene);
+                  download(png, `${base}.png`);
+                  if (png.scale < 1.99) throw Object.assign(new Error(`PNG downloaded at ${png.scale.toFixed(1)}× instead of 2×: this diagram is too wide for a larger image in this browser. Use SVG or PDF for full resolution.`), { kind: 'ok' });
+                },
+                ok: 'PNG downloaded',
+              },
             ].map((m) => (
               <MenuItem key={m.label} {...m} onRun={run} />
             ))}
@@ -313,7 +342,7 @@ function Toolbar({ diagram, onToast }: { diagram: Diagram; onToast: (t: Toast) =
             )}
             <MenuHeading>Project</MenuHeading>
             <MenuItem label="Project file" hint="All definitions + customisations + scenarios (.bpmap.json)" fn={() => download(projectBlob({ definitions, overlays, scenarios, views }), `${base}.bpmap.json`)} ok="Project file downloaded" onRun={run} />
-            <MenuItem label="Customisations only" hint="Labels, notes, plain-word conditions and presets for this definition; no Workday data" fn={() => download(customisationsBlob(diagram.def, diagram.overlay, scenarios[diagram.def.id], views[diagram.def.id]), `${base}.customisations.json`)} ok="Customisations downloaded" onRun={run} />
+            <MenuItem label="Customisations only" hint="Labels, notes, plain words, presets and positions for this definition. Contains condition wording (as keys), no steps or groups" fn={() => download(customisationsBlob(diagram.def, diagram.overlay, scenarios[diagram.def.id], views[diagram.def.id]), `${base}.customisations.json`)} ok="Customisations downloaded" onRun={run} />
           </div>
         </details>
       </div>

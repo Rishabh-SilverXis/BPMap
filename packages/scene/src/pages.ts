@@ -45,8 +45,8 @@ export function buildConditionsScene(def: ProcessDefinition, theme: Theme = 'lig
     const x = M + col * (colW + 48);
     let y = colY[col]!;
     const plain = conditionText[c.id];
-    const lines = wrapText(plain ?? c.text, textW, 17, 500, 3);
-    const original = plain ? wrapText(`Workday: ${c.text}`, textW, 13, 400, 2) : [];
+    const lines = wrapText(plain ?? c.text, textW, 17, 500); // never clamped: the page grows (TEST-2026-11-11 D3)
+    const original = plain ? wrapText(`Workday: ${c.text}`, textW, 13, 400) : [];
     list.push({ t: 'rect', x, y: y - 16, w: 46, h: 22, r: 11, fill: tk.conditionBadge.bg, stroke: tk.conditionalBorder, strokeWidth: 1.25 });
     list.push({ t: 'text', x: x + 23, y: y, text: c.id, size: 13, weight: 700, fill: tk.conditionBadge.text, anchor: 'middle', mono: true });
     for (const ln of lines) {

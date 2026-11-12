@@ -85,9 +85,9 @@ export function parseNotifications(rows: string[][], steps: readonly Step[]): { 
     };
     for (const r of tableRows(rows, custom.headerIndex)) {
       const cell = (i: number) => (i >= 0 ? decodeCell(r[i] ?? '') : '');
-      const name = cell(c.name).trim();
-      if (!name) continue;
       const trigger = cell(c.trigger).replace(/\s+/g, ' ').trim();
+      const name = cell(c.name).trim() || (trigger ? `Custom notification (${trigger})` : ''); // unnamed rows are kept, not dropped (TEST-2026-11-11 D8)
+      if (!name) continue;
       const order = triggerOrder(trigger);
       const step = byOrder(order);
       if (order && !step) unlinked += 1;

@@ -94,9 +94,15 @@ export function importWorkbook(bytes: Uint8Array, opts: ImportOptions = {}): Imp
 
   // No sheet scored ≥ 4 fields: either a mapping answer was supplied, or ask for one.
   if (!stepsSheet) {
-    const candidates = sheets.map((s, idx) => ({ idx, hit: bestGuessHeader(s.rows, limits.headerSearchRows) })).filter((c) => c.hit);
+    // Only sheets without a recognised non-steps section title are candidates: a Notifications sheet's
+    // header (Order, Type, Specify, Group) would otherwise score as a Steps sheet (TEST-2026-11-11 D2).
+    const candidates = sheets
+      .map((s, idx) => ({ idx, title: sectionTitle(s.rows, limits.headerSearchRows) }))
+      .filter((c) => !c.title || c.title.kind === 'steps')
+      .map((c) => ({ idx: c.idx, hit: bestGuessHeader(sheets[c.idx]!.rows, limits.headerSearchRows) }))
+      .filter((c) => c.hit);
     const best = candidates.sort((a, b) => b.hit!.score - a.hit!.score)[0];
-    if (!best) return { status: 'error', code: 'E-NO-STEPS-SHEET', message: 'No Steps sheet was found. Export the definition from View Definition → Excel.' };
+    if (!best) return { status: 'error', code: 'E-NO-STEPS-SHEET', message: `No Steps sheet was found in the first ${limits.headerSearchRows} rows of any sheet. Export the definition from View Definition → Excel.` };
     const fingerprint = headerFingerprint(best.hit!.headers);
     const chosen = opts.mapping?.fingerprint === fingerprint ? opts.mapping.map : opts.mappingProfiles?.[fingerprint];
     if (!chosen || missingRequired(chosen).length) {
@@ -129,6 +135,10 @@ export function importWorkbook(bytes: Uint8Array, opts: ImportOptions = {}): Imp
     limits,
     truncatedRows: sheet.truncatedRows,
   });
+
+  if (!draft.steps.length) {
+    return { status: 'error', code: 'E-NO-STEPS-SHEET', message: `The Steps sheet "${sheet.name}" has a header but no step rows. Export the definition again from View Definition → Excel.` };
+  }
 
   if (notificationsIdx >= 0) {
     const { notifications, unlinked } = parseNotifications(sheets[notificationsIdx]!.rows, draft.steps);

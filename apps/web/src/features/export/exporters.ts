@@ -7,6 +7,7 @@ import { slug, parseProject, withFreshStageKeys, SCHEMA_VERSION, type ProcessDef
 import { toSvg, type Scene } from '@bpmap/scene';
 import { isView, normaliseOverlay, type Overlay, type View } from '../../store/overlay.ts';
 import { isScenarioState, withTextKeys, type ScenarioState } from '@bpmap/engine-scenario';
+import { PNG_MIN_SCALE, pngScale } from '@bpmap/exporters/limits';
 
 export const fileBase = (def: ProcessDefinition) => slug(`${def.process} ${def.variant}`) || 'business-process';
 const title = (def: ProcessDefinition) => (def.variant ? `${def.process} (${def.variant})` : def.process);
@@ -24,14 +25,19 @@ export function download(blob: Blob, name: string) {
 
 export const svgBlob = (def: ProcessDefinition, scene: Scene) => new Blob([toSvg(scene, title(def))], { type: 'image/svg+xml' });
 
-/** Rasterise the SVG at 2× (EXP-01). Uses a blob: image, allowed by the CSP img-src. */
-export async function pngBlob(def: ProcessDefinition, scene: Scene, scale = 2): Promise<Blob> {
+const PNG_TIMEOUT_MS = 30_000;
+
+/** Rasterise the SVG, at 2× where the browser allows it (EXP-01). Uses a blob: image, allowed by the CSP img-src. */
+export async function pngBlob(def: ProcessDefinition, scene: Scene, wanted = 2): Promise<Blob & { scale: number }> {
+  const scale = pngScale(scene, wanted);
+  if (scale < PNG_MIN_SCALE) throw new Error(`This diagram is too wide for a PNG in this browser (${scene.width} × ${scene.height} px). Export SVG or PDF instead: they have no size limit.`);
   const url = URL.createObjectURL(svgBlob(def, scene));
+  const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('PNG export timed out. Export SVG or PDF instead.')), PNG_TIMEOUT_MS));
   try {
     const img = new Image();
     img.decoding = 'async';
     img.src = url;
-    await img.decode();
+    await Promise.race([img.decode(), timeout]);
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(scene.width * scale);
     canvas.height = Math.ceil(scene.height * scale);
@@ -39,7 +45,8 @@ export async function pngBlob(def: ProcessDefinition, scene: Scene, scale = 2): 
     if (!ctx) throw new Error('Canvas is not available in this browser.');
     ctx.scale(scale, scale);
     ctx.drawImage(img, 0, 0);
-    return await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('PNG encoding failed'))), 'image/png'));
+    const blob = await Promise.race([new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('PNG encoding failed. Export SVG or PDF instead.'))), 'image/png')), timeout]);
+    return Object.assign(blob, { scale });
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -114,7 +121,8 @@ export async function readProjectFile(file: File, preParsed?: unknown): Promise<
 /* ---------------------------------------------------------------- customisations file (CUS-03) */
 
 /**
- * Only the customisations for ONE definition: no Workday data except the process name it belongs to,
+ * Only the customisations for ONE definition: no steps, groups or rows, but the process name and, as keys of
+ * plain-word rewrites, the Workday text of the conditions the user rewrote (DEC-049; TEST-2026-11-11 D5),
  * so a colleague can apply them to their own export of the same process (DEC-050).
  */
 export interface CustomisationsFile {
